@@ -3,33 +3,33 @@ const HtmlWebpackPlugin = require('html-webpack-plugin');
 
 module.exports = {
   mode: 'development',
-  entry: './src/renderer.js',
+  entry: './src/renderer.js',  // Ensure this exists
   output: {
-    path: path.resolve(__dirname, 'dist'),
+    path: path.resolve(__dirname,'src','dist'),  // ✅ Outputs to dist/, not src/dist/
     filename: 'renderer.bundle.js',
   },
   module: {
     rules: [
       {
-        test: /\.jsx?$/,
+        test: /\.js$/,
         exclude: /node_modules/,
         use: {
           loader: 'babel-loader',
+          options: {
+            presets: ['@babel/preset-env', '@babel/preset-react'],
+          },
         },
       },
       {
         test: /\.css$/,
-        use: ['style-loader', 'css-loader'], // Optional for CSS
+        use: ['style-loader', 'css-loader', 'postcss-loader'],
       },
     ],
   },
-  resolve: {
-    extensions: ['.js', '.jsx'], // Support JSX extensions
-  },
   plugins: [
     new HtmlWebpackPlugin({
-      template: './src/index.html',
+      template: './src/index.html', // ✅ Ensure src/index.html exists
+      filename: 'index.html',
     }),
   ],
-  devtool: 'source-map',
 };

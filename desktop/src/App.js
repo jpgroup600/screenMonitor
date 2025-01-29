@@ -1,10 +1,9 @@
 import React from 'react';
-
+import Login from './Screens/Login';
 const App = () => {
     return (
-        <div>
-            <h1>Hello, Electron + React!</h1>
-            <p>Welcome to your React-powered Electron app.</p>
+        <div className='w-screen h-screen'>
+            <Login/>
         </div>
     );
 };
