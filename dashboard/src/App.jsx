@@ -1,9 +1,18 @@
-
+import Sidebar from "./Components/Sidebar"
+import Dashboard from "./Screens/Dashboard"
+import {Routes,Route} from 'react-router-dom'
+import Projects from "./Screens/Projects"
 function App() {
   return (
-    <>
-      <h1 className='bg-black text-white'>Hello World</h1>
-    </>
+    <div className="flex">
+    <Sidebar/>
+    <div className="ml-64">
+      <Routes>
+        <Route path='/' element = {<Dashboard/>}/>
+        <Route path="/projects" element={<Projects/>}/>
+      </Routes>
+    </div> 
+    </div>
   )
 }
 
