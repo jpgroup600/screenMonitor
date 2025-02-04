@@ -1,7 +1,10 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow,ipcMain } = require('electron');
 const path = require('path');
 const started = require('electron-squirrel-startup');
+require('dotenv').config(); // ✅ Load .env here
 
+// Add IPC handler for BACKEND_URL
+ipcMain.handle('get-backend-url', () => process.env.BACKEND_URL);
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
   app.quit();

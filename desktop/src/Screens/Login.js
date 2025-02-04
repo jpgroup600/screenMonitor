@@ -1,19 +1,47 @@
+// src/Screens/Login.jsx
 import React, { useState } from "react";
+import request from "../Actions/request"; // Adjust the path if needed
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log("Email:", email, "Password:", password);
-  };
+    setLoading(true);
+    setError("");
 
+    try {
+      const response = await request.post("/employee/login", { email, password });
+
+      if (response.data && response.data.token) { // Assuming token is in response.data
+        const token = response.data.token;
+        localStorage.setItem("token", token);
+        setToken(token); // Update parent component state
+        navigate("/dashboard"); // Navigate to dashboard
+      } else {
+        setError("Login failed. Please check your credentials.");
+      }
+    } catch (err) {
+      console.error("Error logging in:", err);
+      setError(err.response?.data?.message || "Error logging in. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <div className="flex items-center justify-center h-screen bg-gray-900">
       <div className="bg-gray-800 p-8 rounded-lg shadow-lg w-full max-w-md">
-        <h2 className="text-3xl font-semibold text-white text-center mb-6">Welcome Back</h2>
-        
+        <h2 className="text-3xl font-semibold text-white text-center mb-6">
+          Welcome Back
+        </h2>
+        {error && (
+          <p className="text-red-500 text-center mb-4">
+            {error}
+          </p>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email Input */}
           <div>
@@ -28,7 +56,6 @@ export default function Login() {
               required
             />
           </div>
-
           {/* Password Input */}
           <div>
             <label className="block text-gray-400 mb-1">Password</label>
@@ -42,15 +69,14 @@ export default function Login() {
               required
             />
           </div>
-
           {/* Submit Button */}
           <button
             type="submit"
+            disabled={loading}
             className="w-full bg-blue-500 hover:bg-blue-600 text-white font-semibold py-2 rounded-md transition duration-300"
           >
-            Login
+            {loading ? "Logging in..." : "Login"}
           </button>
-
           {/* Register Link */}
           <p className="text-gray-400 text-sm text-center mt-2">
             Don't have an account?{" "}
