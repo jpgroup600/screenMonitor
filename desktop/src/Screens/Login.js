@@ -1,13 +1,15 @@
 // src/Screens/Login.jsx
 import React, { useState } from "react";
 import request from "../Actions/request"; // Adjust the path if needed
+import {useNavigate} from 'react-router-dom'
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
+  const navigate = useNavigate();
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -16,17 +18,17 @@ export default function Login() {
     try {
       const response = await request.post("/employee/login", { email, password });
 
-      if (response.data && response.data.token) { // Assuming token is in response.data
-        const token = response.data.token;
+      if (response && response.token) {
+        const token = response.token;
         localStorage.setItem("token", token);
-        setToken(token); // Update parent component state
-        navigate("/dashboard"); // Navigate to dashboard
+        navigate("/dashboard");
       } else {
         setError("Login failed. Please check your credentials.");
+        console.log(response)
       }
     } catch (err) {
       console.error("Error logging in:", err);
-      setError(err.response?.data?.message || "Error logging in. Please try again.");
+      setError(err.response?.message || "Error logging in. Please try again.");
     } finally {
       setLoading(false);
     }
