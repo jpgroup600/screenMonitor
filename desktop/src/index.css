@@ -7,3 +7,12 @@ body{
   background-color: #222222;
   color:white;
 }
+
+.drag {
+  -webkit-app-region: drag;  /* Enables window dragging */
+  flex-grow: 1;  /* Allows dragging over the entire area */
+}
+
+.non-draggable {
+  -webkit-app-region: no-drag;  /* Prevents buttons from being draggable */
+}

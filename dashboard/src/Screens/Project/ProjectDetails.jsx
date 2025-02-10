@@ -1,47 +1,60 @@
-// src/Screens/Project/ProjectDetails.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import request from '../../Actions/request';
-import EmployeeCard from '../../Components/Project/EmployeeCard';
+import EmployeeCardWithStatus from '../../Components/EmployeeCardWithStatus';
 import TeamModal from '../../Components/Project/TeamModal';
+import { OnlineUsersContext } from '../../Contexts/OnlineUsersContext';
 
 export default function ProjectDetails() {
   const { projectId } = useParams();
   const navigate = useNavigate();
 
   const [project, setProject] = useState(null);
-  const [loadingProject, setLoadingProject] = useState(false);
-  const [error, setError] = useState(null);
+  const [teamMembers, setTeamMembers] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [isTeamModalOpen, setIsTeamModalOpen] = useState(false);
+  const [error, setError] = useState(null);
 
-  // Fetch project details from backend
+  // Get online user IDs from global context
+  const { onlineUserIds } = useContext(OnlineUsersContext);
+
+  // Fetch project details
   useEffect(() => {
     async function fetchProjectDetails() {
-      setLoadingProject(true);
       try {
         const proj = await request.get(`/project/${projectId}`);
         setProject(proj);
       } catch (err) {
         console.error('Error fetching project details:', err);
         setError('Error fetching project details.');
-      } finally {
-        setLoadingProject(false);
       }
     }
+
+    async function fetchProjectEmployees() {
+      try {
+        const employees = await request.get(`/project/employees/${projectId}`);
+        setTeamMembers(employees);
+      } catch (err) {
+        console.error('Error fetching project employees:', err);
+      }
+    }
+
     fetchProjectDetails();
+    fetchProjectEmployees();
+    setLoading(false);
   }, [projectId]);
 
-  // Refresh project details after team changes
+  // Refresh team members after changes
   const refreshProjectDetails = async () => {
     try {
-      const proj = await request.get(`/project/${projectId}`);
-      setProject(proj);
+      const employees = await request.get(`/project/employees/${projectId}`);
+      setTeamMembers(employees);
     } catch (err) {
-      console.error('Error refreshing project details:', err);
+      console.error('Error refreshing project employees:', err);
     }
   };
 
-  if (loadingProject) {
+  if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#020617]">
         <div className="animate-spin">
@@ -58,19 +71,16 @@ export default function ProjectDetails() {
     return (
       <div className="p-8 text-white">
         <p>{error || 'Project data not available.'}</p>
-        <button onClick={() => navigate('/projects')} className="text-teal-500 hover:underline">
+        <button onClick={() => navigate('/projects')} className="text-blue-500 hover:underline">
           Back to Projects
         </button>
       </div>
     );
   }
 
-  // Assume the project object contains: id, name, description, endDate, status, and (optionally) team members in a field (e.g., project.team)
-  const teamMembers = project.team || []; // Adjust if your API returns a different field
-
   return (
     <div className="min-h-screen p-8 bg-[#020617] text-white">
-      <button onClick={() => navigate(-1)} className="mb-4 text-teal-500 hover:underline">
+      <button onClick={() => navigate(-1)} className="mb-4 text-blue-500 hover:underline">
         &larr; Back
       </button>
 
@@ -80,8 +90,7 @@ export default function ProjectDetails() {
         <p className="mb-4">{project.description}</p>
         <div className="flex flex-col md:flex-row md:justify-between md:items-center">
           <p>
-            Due Date:{' '}
-            <span className="font-medium">{new Date(project.endDate).toLocaleDateString()}</span>
+            Due Date: <span className="font-medium">{new Date(project.endDate).toLocaleDateString()}</span>
           </p>
           <p>
             Status: <span className="font-medium">{project.status}</span>
@@ -95,7 +104,7 @@ export default function ProjectDetails() {
           <h2 className="text-2xl font-semibold">Project Team</h2>
           <button
             onClick={() => setIsTeamModalOpen(true)}
-            className="bg-[#0068f7] hover:bg-[#0067f7bb] text-white px-4 py-2 rounded-lg transition-all duration-300"
+            className="bg-[#0068f7] hover:bg-[#005ac7] text-white px-4 py-2 rounded-lg transition-all duration-300"
           >
             Build a Team
           </button>
@@ -103,11 +112,11 @@ export default function ProjectDetails() {
         {teamMembers.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {teamMembers.map((member) => (
-              <EmployeeCard key={member.id} employee={member} isSelected={false} onSelect={() => {}} />
+              <EmployeeCardWithStatus key={member.id} employee={member} isOnline={onlineUserIds.includes(member.id)} />
             ))}
           </div>
         ) : (
-          <p>No team members assigned yet.</p>
+          <p className="text-gray-400">No team members assigned yet.</p>
         )}
       </div>
 

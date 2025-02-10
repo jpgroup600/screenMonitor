@@ -1,6 +1,6 @@
 // src/Screens/Login.jsx
 import React, { useState } from "react";
-import request from "../Actions/request"; // Adjust the path if needed
+import request from "../Actions/request";
 import {useNavigate} from 'react-router-dom'
 
 export default function Login() {

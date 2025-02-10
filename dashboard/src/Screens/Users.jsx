@@ -1,25 +1,25 @@
-// src/Screens/Users.jsx
-import React, { useState, useEffect } from 'react';
-import request from '../Actions/request';
-import * as signalR from '@microsoft/signalr';
-import EmployeeCardWithStatus from '../Components/EmployeeCardWithStatus';
-import EmployeeRegisterForm from '../Components/Users/EmployeeRegisterForm';
+import React, { useState, useEffect, useContext } from "react";
+import request from "../Actions/request";
+import EmployeeCardWithStatus from "../Components/EmployeeCardWithStatus";
+import EmployeeRegisterForm from "../Components/Users/EmployeeRegisterForm";
+import { OnlineUsersContext } from "../Contexts/OnlineUsersContext";
 
 export default function Users() {
   const [employees, setEmployees] = useState([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
-  const [onlineUserIds, setOnlineUserIds] = useState([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
+  
+  // Get online user IDs from context
+  const { onlineUserIds } = useContext(OnlineUsersContext);
 
-  // Fetch employees from /admin/only-employees
   const fetchEmployees = async () => {
     setLoadingEmployees(true);
     try {
-      const data = await request.get('/admin/only-employees');
+      const data = await request.get("/admin/only-employees");
       setEmployees(data);
     } catch (error) {
-      console.error('Error fetching employees:', error);
+      console.error("Error fetching employees:", error);
     } finally {
       setLoadingEmployees(false);
     }
@@ -29,47 +29,6 @@ export default function Users() {
     fetchEmployees();
   }, []);
 
-  // Set up SignalR connection for online users
-  useEffect(() => {
-    const connection = new signalR.HubConnectionBuilder()
-      .withUrl('https://localhost:7037/useractivityhub', {
-        // If your hub requires an access token, uncomment below:
-        accessTokenFactory: () => localStorage.getItem('token')
-      })
-      .withAutomaticReconnect()
-      .build();
-
-    connection
-      .start()
-      .then(() => {
-        console.log('Connected to SignalR hub');
-        connection.invoke('GetOnlineUsers');
-      })
-      .catch((error) => console.error('Error connecting to SignalR hub:', error));
-
-    connection.on('ReceiveOnlineUsers', (users) => {
-      console.log('Received online users:', users);
-      // Assume each user object has a property "key" representing the user ID
-      setOnlineUserIds(users.map((u) => u.key));
-    });
-
-    connection.on('UserStatusChanged', (userId, role, isOnline) => {
-      console.log('User status changed:', userId, isOnline);
-      setOnlineUserIds((prevIds) => {
-        if (isOnline) {
-          return prevIds.includes(userId) ? prevIds : [...prevIds, userId];
-        } else {
-          return prevIds.filter((id) => id !== userId);
-        }
-      });
-    });
-
-    return () => {
-      connection.stop();
-    };
-  }, []);
-
-  // Filter employees by search query (client-side)
   const filteredEmployees = employees.filter((employee) =>
     employee.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
     employee.email.toLowerCase().includes(searchQuery.toLowerCase()) ||

@@ -18,37 +18,43 @@ export default function ProjectForm({ setIsModalOpen, handleCreateProject }) {
   const [error, setError] = useState(null);
 
   const handleSubmit = async () => {
-    // Basic validation: ensure name and description are provided.
     if (!newProject.name || !newProject.description) return;
-
+  
     setLoading(true);
     setError(null);
-
+  
     try {
-      // Send a POST request using the post method from request.js.
-      // This will call: POST `${process.env.BACKEND_URL}/project`
-      const response = await request.post('/project', newProject);
-
-      // Optionally update parent state with the new project.
-      handleCreateProject(newProject);
-
-      // Reset the form fields.
+      // Ensure endDate is formatted as an ISO string
+      const formattedProject = {
+        ...newProject,
+        endDate: newProject.endDate ? newProject.endDate.toISOString() : null,
+      };
+  
+      console.log("Sending Project:", formattedProject);
+  
+      // Send the formatted project object
+      const response = await request.post("/project", formattedProject);
+  
+      // Update parent state
+      handleCreateProject(formattedProject);
+  
+      // Reset form fields
       setNewProject({
-        name: '',
-        description: '',
+        name: "",
+        description: "",
         endDate: new Date(),
-        status: 'Active'
+        status: "Active",
       });
-
-      // Close the modal.
+  
       setIsModalOpen(false);
     } catch (err) {
-      console.error('Error creating project:', err);
-      setError('Failed to create project. Please try again.');
+      console.error("Error creating project:", err);
+      setError("Failed to create project. Please try again.");
     } finally {
       setLoading(false);
     }
   };
+  
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex items-center justify-center">

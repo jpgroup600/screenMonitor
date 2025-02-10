@@ -3,6 +3,7 @@ import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import * as signalR from '@microsoft/signalr';
 import Login from './Screens/Login';
 import Dashboard from './Screens/Dashboard';
+import CustomTitleBar from './Components/CustomTitleBar';
 
 const App = () => {
   const [token, setToken] = useState(localStorage.getItem('token'));
@@ -60,6 +61,7 @@ const App = () => {
   return (
     <Router>
       <div className="w-screen h-screen bg-gray-50">
+      <CustomTitleBar />
         <Routes>
           <Route path="/" element={
             token ? <Navigate to="/dashboard" replace /> : <Login setToken={setToken} />

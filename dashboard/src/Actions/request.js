@@ -16,7 +16,7 @@ const axiosInstance = axios.create({
 // Optional: Add an interceptor to attach an authorization token to every request
 axiosInstance.interceptors.request.use(
   (config) => {
-    const token = "eyJhbGciOiJodHRwOi8vd3d3LnczLm9yZy8yMDAxLzA0L3htbGRzaWctbW9yZSNobWFjLXNoYTUxMiIsInR5cCI6IkpXVCJ9.eyJodHRwOi8vc2NoZW1hcy54bWxzb2FwLm9yZy93cy8yMDA1LzA1L2lkZW50aXR5L2NsYWltcy9uYW1laWRlbnRpZmllciI6Ijg0OGFhYTZiLTNlYzgtNGIwMi1iZjQzLWQ0OGZlNzNlOTQxMCIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL2VtYWlsYWRkcmVzcyI6ImphbmVkb2VAZ21haWwuY29tIiwiaHR0cDovL3NjaGVtYXMubWljcm9zb2Z0LmNvbS93cy8yMDA4LzA2L2lkZW50aXR5L2NsYWltcy9yb2xlIjoiQWRtaW4iLCJleHAiOjE3NDEyNzUwMTQsImlzcyI6InNlaGF0bWFuZC5wayJ9.rNHftScIGrtjv3QHeU3zxqxtTPvl4uQxJ8QQU1xqkWV15qukaig7gFfYi9P0AnzkSEp6cK3q0Z1w3pglHJzboA"; // Or wherever you store your token
+    const token = localStorage.getItem('token')
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
