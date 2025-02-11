@@ -7,7 +7,7 @@ export default function CustomTitleBar() {
   const handleClose = () => window.electronAPI.close();
 
   return (
-    <div className="flex justify-between items-center bg-[#020617] text-white h-6 pl-4 select-none">
+    <div className="absolute flex justify-between items-center bg-[#020617] text-white h-6 w-screen pl-4 select-none">
       {/* Draggable Area */}
       <div className="text-gray-400 flex-1 drag">Employee Tracker</div>
       

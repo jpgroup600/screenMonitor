@@ -52,7 +52,7 @@ const App = () => {
 
   if (loading) {
     return (
-      <div className="w-screen h-screen flex items-center justify-center bg-gray-100">
+      <div className="flex items-center justify-center bg-gray-100">
         <div className="text-xl text-gray-600">Initializing...</div>
       </div>
     );
@@ -60,7 +60,7 @@ const App = () => {
 
   return (
     <Router>
-      <div className="w-screen h-screen bg-gray-50">
+      <div className=" w-screen h-screen bg-gray-50">
       <CustomTitleBar />
         <Routes>
           <Route path="/" element={
