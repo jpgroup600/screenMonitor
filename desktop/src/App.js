@@ -3,6 +3,7 @@ import { HashRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import * as signalR from '@microsoft/signalr';
 import Login from './Screens/Login';
 import Dashboard from './Screens/Dashboard';
+import SessionStarted from './Screens/SessionStarted'; // Import the SessionStarted screen
 import CustomTitleBar from './Components/CustomTitleBar';
 
 const App = () => {
@@ -16,7 +17,7 @@ const App = () => {
       if (token && !connection) {
         try {
           const newConnection = new signalR.HubConnectionBuilder()
-            .withUrl('https://localhost:7037/useractivityhub', {
+            .withUrl('http://localhost:5265/useractivityhub', {
               accessTokenFactory: () => token,
             })
             .withAutomaticReconnect()
@@ -30,7 +31,6 @@ const App = () => {
           newConnection.on("UserConnected", (userId) => {
             console.log("User connected:", userId);
           });
-
         } catch (error) {
           console.error('SignalR Connection Error:', error);
           localStorage.removeItem('token');
@@ -60,21 +60,21 @@ const App = () => {
 
   return (
     <Router>
-      <div className=" w-screen h-screen bg-gray-50">
-      <CustomTitleBar />
+      <div className="w-screen h-screen bg-gray-50">
+        <CustomTitleBar />
         <Routes>
-          <Route path="/" element={
-            token ? <Navigate to="/dashboard" replace /> : <Login setToken={setToken} />
-          } />
-          
-          <Route path="/dashboard" element={
-            token ? (
-              <Dashboard connection={connection} />
-            ) : (
-              <Navigate to="/" replace />
-            )
-          } />
-
+          <Route 
+            path="/" 
+            element={ token ? <Navigate to="/dashboard" replace /> : <Login setToken={setToken} /> } 
+          />
+          <Route 
+            path="/dashboard" 
+            element={ token ? <Dashboard connection={connection} /> : <Navigate to="/" replace /> } 
+          />
+          <Route 
+            path="/sessionStarted" 
+            element={ token ? <SessionStarted /> : <Navigate to="/" replace /> } 
+          />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

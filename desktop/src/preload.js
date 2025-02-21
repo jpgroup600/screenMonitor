@@ -1,13 +1,15 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
-// Expose a method to get the BACKEND_URL from the main process
+// Expose a method to get the BACKEND_URL from the main process.
 contextBridge.exposeInMainWorld("backend", {
-  getBackendUrl: async () => await ipcRenderer.invoke("get-backend-url"), // Ensure it returns a promise
+  getBackendUrl: async () => await ipcRenderer.invoke("get-backend-url"),
 });
 
-// Expose window controls to the renderer process
+// Expose window controls and additional session-related functions.
 contextBridge.exposeInMainWorld("electronAPI", {
-  minimize: () => ipcRenderer.send("window-minimize"), // Ensure event names match main.js
+  minimize: () => ipcRenderer.send("window-minimize"),
   maximize: () => ipcRenderer.send("window-maximize"),
   close: () => ipcRenderer.send("window-close"),
+  sessionStart: () => ipcRenderer.send("session-start"),
+  userActivity: () => ipcRenderer.send("user-activity"),
 });

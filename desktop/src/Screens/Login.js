@@ -20,7 +20,10 @@ export default function Login() {
 
       if (response && response.token) {
         const token = response.token;
+        const userId = response.userId;
+
         localStorage.setItem("token", token);
+        localStorage.setItem("userId", userId);
         navigate("/dashboard");
       } else {
         setError("Login failed. Please check your credentials.");

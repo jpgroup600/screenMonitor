@@ -8,7 +8,7 @@ export const OnlineUsersProvider = ({ children }) => {
 
   useEffect(() => {
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl("https://localhost:7037/useractivityhub", {
+      .withUrl("http://localhost:5265/useractivityhub", {
         accessTokenFactory: () => localStorage.getItem("token"),
       })
       .withAutomaticReconnect()
