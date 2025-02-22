@@ -1,36 +1,46 @@
-const { FusesPlugin } = require('@electron-forge/plugin-fuses');
-const { FuseV1Options, FuseVersion } = require('@electron/fuses');
+const { FusesPlugin } = require("@electron-forge/plugin-fuses");
+const { FuseV1Options, FuseVersion } = require("@electron/fuses");
 
 module.exports = {
   packagerConfig: {
+    // Package your app into an asar archive
     asar: true,
+    // Optional: Provide a name for your app (used by Electron Packager)
+    name: "ETracker",
+    // Optional: The executable name (without .exe)
+    executableName: "ETracker",
   },
   rebuildConfig: {},
   makers: [
     {
-      name: '@electron-forge/maker-squirrel',
+      name: "@electron-forge/maker-squirrel",
+      config: {
+        name: "ETracker",         // Required for Squirrel
+        authors: "mrnobo09",    
+        exe: "ETracker.exe",
+        setupExe: "ETrackerSetup.exe",
+        // setupIcon: "./assets/icon.ico", // Uncomment & provide an icon if you have one
+        // description: "ETracker - a helpful tracking app" // Optional
+      },
+    },
+    {
+      name: "@electron-forge/maker-zip",
+      platforms: ["darwin"],
+    },
+    {
+      name: "@electron-forge/maker-deb",
       config: {},
     },
     {
-      name: '@electron-forge/maker-zip',
-      platforms: ['darwin'],
-    },
-    {
-      name: '@electron-forge/maker-deb',
-      config: {},
-    },
-    {
-      name: '@electron-forge/maker-rpm',
+      name: "@electron-forge/maker-rpm",
       config: {},
     },
   ],
   plugins: [
     {
-      name: '@electron-forge/plugin-auto-unpack-natives',
+      name: "@electron-forge/plugin-auto-unpack-natives",
       config: {},
     },
-    // Fuses are used to enable/disable various Electron functionality
-    // at package time, before code signing the application
     new FusesPlugin({
       version: FuseVersion.V1,
       [FuseV1Options.RunAsNode]: false,
