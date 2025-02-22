@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import request from '../../Actions/request';
-import EmployeeCardWithStatus from '../../Components/EmployeeCardWithStatus';
 import TeamModal from '../../Components/Project/TeamModal';
 import { OnlineUsersContext } from '../../Contexts/OnlineUsersContext';
+import EmployeeCardSession from '../../Components/Session/EmployeeCardSession';
 
 export default function ProjectDetails() {
   const { projectId } = useParams();
@@ -112,7 +112,7 @@ export default function ProjectDetails() {
         {teamMembers.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {teamMembers.map((member) => (
-              <EmployeeCardWithStatus key={member.id} employee={member} isOnline={onlineUserIds.includes(member.id)} />
+              <EmployeeCardSession key={member.id} employee={member} isOnline={onlineUserIds.includes(member.id)} projectId={projectId}/>
             ))}
           </div>
         ) : (

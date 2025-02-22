@@ -1,26 +1,33 @@
 // src/Components/Sidebar.jsx
-import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Link, useLocation } from 'react-router-dom';
 import { 
   FiGrid, 
   FiFolder, 
   FiUsers, 
   FiSettings, 
-  FiLogOut 
+  FiLogOut,
+  FiX,
+  FiMenu 
 } from 'react-icons/fi';
 import LogoutPopup from './LogoutPopup';
 
-export default function Sidebar() {
+export default function Sidebar({ isSidebarOpen, setIsSidebarOpen }) {
   const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+  const location = useLocation();
 
   const menuItems = [
     { title: 'Dashboard', icon: <FiGrid />, link: '/' },
     { title: 'Projects', icon: <FiFolder />, link: '/projects' },
     { title: 'Users', icon: <FiUsers />, link: '/users' },
     { title: 'Settings', icon: <FiSettings />, link: '/settings' },
-    // Logout will be handled separately
     { title: 'Logout', icon: <FiLogOut />, link: '/logout' },
   ];
+
+  // Close sidebar when route changes (mobile)
+  useEffect(() => {
+    setIsSidebarOpen(false);
+  }, [location.pathname]);
 
   const handleLogoutClick = () => {
     setShowLogoutPopup(true);
@@ -28,7 +35,17 @@ export default function Sidebar() {
 
   return (
     <>
-      <aside className="fixed w-64 h-full p-2 bg-[#121222]">
+      {/* Mobile Menu Button */}
+      <button
+        onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+        className="md:hidden fixed top-4 left-4 z-50 p-2 text-white bg-[#121222] rounded-lg"
+      >
+        {isSidebarOpen ? <FiX size={24} /> : <FiMenu size={24} />}
+      </button>
+
+      {/* Sidebar */}
+      <aside className={`fixed w-64 h-full p-2 bg-[#121222] transform transition-all duration-300 ease-in-out
+        ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'} md:translate-x-0 z-40`}>
         <div className="flex items-center gap-3 m-10">
           <h1 className="text-white font-semibold text-3xl">E-TRACKER</h1>
         </div>
@@ -73,6 +90,15 @@ export default function Sidebar() {
           </nav>
         </div>
       </aside>
+
+      {/* Backdrop for mobile */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 md:hidden z-30"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {showLogoutPopup && (
         <LogoutPopup onClose={() => setShowLogoutPopup(false)} />
       )}
