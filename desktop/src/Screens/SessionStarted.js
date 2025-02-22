@@ -11,8 +11,7 @@ const SessionStarted = () => {
 
   const handleEndSession = async () => {
     try {
-      const backendUrl = await window.backend.getBackendUrl();
-      const endpoint = `${backendUrl}/session/end`;
+      const endpoint = `/session/end`;
       const response = await request.post(endpoint, { projectId: String(projectId) });
       console.log("Session end response:", response);
       // Optionally, navigate back to the dashboard after ending the session.

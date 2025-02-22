@@ -70,11 +70,8 @@ const Dashboard = () => {
       return;
     }
     try {
-      // Get the backend URL from the preload API.
-      const backendUrl = await window.backend.getBackendUrl();
-      // Construct the endpoint and send the session start request.
-      const endpoint = `${backendUrl}/session/start`;
-      const response = await request.post(endpoint, { projectId: String(selectedProjectId) });
+  
+      const response = await request.post('/session/start', { projectId: String(selectedProjectId) });
       console.log("Session start response:", response);
 
       // Notify the main process to start session tasks (minimizing the window, etc.).

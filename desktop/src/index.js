@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, powerMonitor} = require('electron');
 const path = require('path');
 const started = require('electron-squirrel-startup');
 const axios = require('axios');
@@ -129,12 +129,12 @@ async function captureAndSendScreenshot() {
 // Start background tasks for monitoring the active window, idle detection, and screenshot capture.
 function startBackgroundTasks() {
   console.log("Starting background tasks for monitoring foreground app, idle detection, and screenshot capture.");
-  // Check the active application every 5 seconds.
-  setInterval(updateForegroundApp, 5000);
+  // Check the active application every 1 seconds.
+  setInterval(updateForegroundApp, 1000);
   // Check idle time every second.
   setInterval(checkIdleTime, 1000);
-  // Capture and send screenshot every 5 minutes (300,000 milliseconds).
-  setInterval(captureAndSendScreenshot, 10000);
+  // Capture and send screenshot every 10 minutes (600,000 milliseconds).
+  setInterval(captureAndSendScreenshot, 600000);
   // Perform an initial update.
   updateForegroundApp();
   // Immediately capture and send the first screenshot.
@@ -149,6 +149,7 @@ const createWindow = () => {
     titleBarStyle: 'hidden', // Hides native title bar on macOS.
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
+      devTools: false,
     },
   });
 
