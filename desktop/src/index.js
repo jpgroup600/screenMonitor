@@ -195,7 +195,6 @@ const createWindow = () => {
   });
 
   mainWindow.loadURL(`file://${path.join(__dirname, 'dist', 'index.html')}`);
-  mainWindow.webContents.openDevTools();
 };
 
 app.whenReady().then(() => {

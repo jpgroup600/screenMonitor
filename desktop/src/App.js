@@ -19,7 +19,7 @@ const App = () => {
       if (token && !connection) {
         try {
           const newConnection = new signalR.HubConnectionBuilder()
-            .withUrl(`${baseURL}/useractivityhub`, {
+            .withUrl(`http://141.164.41.199:8080/api/useractivityhub`, {
               accessTokenFactory: () => token,
             })
             .withAutomaticReconnect()

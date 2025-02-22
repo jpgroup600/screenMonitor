@@ -25,6 +25,8 @@ export default function Login() {
         localStorage.setItem("token", token);
         localStorage.setItem("userId", userId);
         navigate("/dashboard");
+
+        window.location.reload();
       } else {
         setError("Login failed. Please check your credentials.");
         console.log(response)
