@@ -11,13 +11,15 @@ const App = () => {
   const [connection, setConnection] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const baseURL = window.backend ? window.backend.getBackendUrl() : process.env.BACKEND_URL;
+
   // SignalR connection management
   useEffect(() => {
     const connectToSignalR = async () => {
       if (token && !connection) {
         try {
           const newConnection = new signalR.HubConnectionBuilder()
-            .withUrl('http://localhost:5265/useractivityhub', {
+            .withUrl(`${baseURL}/useractivityhub`, {
               accessTokenFactory: () => token,
             })
             .withAutomaticReconnect()
