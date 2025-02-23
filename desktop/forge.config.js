@@ -9,6 +9,8 @@ module.exports = {
     name: "ETracker",
     // The executable name (without .exe)
     executableName: "ETracker",
+    
+    extraResource: ['.env']
   },
   rebuildConfig: {},
   makers: [
