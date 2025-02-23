@@ -1,5 +1,7 @@
 const { app, BrowserWindow, ipcMain, powerMonitor} = require('electron');
 const path = require('path');
+const fs = require('fs');
+const FormData = require('form-data'); 
 const started = require('electron-squirrel-startup');
 const axios = require('axios');
 const screenshot = require('screenshot-desktop');
@@ -35,7 +37,7 @@ async function sendSessionRequest(type, appName) {
         'Authorization': `Bearer ${token}`,
       },
     });
-    console.log(`${type} request sent for ${appName}:`, response.data);
+    // console.log(`${type} request sent for ${appName}:`, response.data);
   } catch (error) {
     console.error(`Error sending ${type} request for ${appName}:`, error);
   }
@@ -52,19 +54,19 @@ async function updateForegroundApp() {
   console.log("Calling updateForegroundApp...");
   try {
     const result = await activeWin();
-    console.log("Active window result:", result);
+    // console.log("Active window result:", result);
     // If idle, force app name to "idle"; otherwise, use the active window's owner name.
     let newApp = isIdle ? "idle" : (result && result.owner ? result.owner.name : "unknown");
-    console.log("Determined new foreground app as:", newApp);
+    // console.log("Determined new foreground app as:", newApp);
 
     // If the foreground app has changed, end the previous session (if any) and start a new one.
     if (newApp !== currentForegroundApp) {
       if (currentForegroundApp !== null) {
-        console.log(`Foreground app changed from ${currentForegroundApp} to ${newApp}. Ending previous session.`);
+        // console.log(`Foreground app changed from ${currentForegroundApp} to ${newApp}. Ending previous session.`);
         await sendSessionRequest("end", currentForegroundApp);
       }
       currentForegroundApp = newApp;
-      console.log(`Starting new session for foreground app: ${currentForegroundApp}`);
+      // console.log(`Starting new session for foreground app: ${currentForegroundApp}`);
       await sendSessionRequest("start", currentForegroundApp);
     }
   } catch (error) {
@@ -77,52 +79,60 @@ function checkIdleTime() {
   if (!sessionActive) return;
   
   const idleTime = powerMonitor.getSystemIdleTime();
-  console.log("Idle time:", idleTime);
+  // console.log("Idle time:", idleTime);
   // You can adjust the idle threshold as needed (here it's set to 15 seconds for testing).
   if (idleTime >= 15 && !isIdle) {
-    console.log("System idle threshold reached, marking as idle.");
+    // console.log("System idle threshold reached, marking as idle.");
     isIdle = true;
     updateForegroundApp();
   } else if (idleTime < 15 && isIdle) {
-    console.log("User activity detected; clearing idle state.");
+    // console.log("User activity detected; clearing idle state.");
     isIdle = false;
     updateForegroundApp();
   }
 }
-
-
 
 async function captureAndSendScreenshot() {
   if (!sessionActive) return;
 
   console.log("Capturing screenshot...");
   try {
-    const imgBuffer = await screenshot({ format: 'png' });
-    
-    // Create Blob from Buffer
-    const blob = new Blob([imgBuffer], { type: 'image/png' });
-    
-    const formData = new FormData();
-    formData.append('image', blob, 'screenshot.png');
+      const imgBuffer = await screenshot({ format: "png" });
 
-    const token = await mainWindow.webContents.executeJavaScript(
-      'localStorage.getItem("token")'
-    );
+      // Save image to a temp file
+      const tempFilePath = "screenshot.png";
+      fs.writeFileSync(tempFilePath, imgBuffer);
 
-    const response = await axios.post(
-      `${BACKEND_URL}/screenshots/upload`,
-      formData,
-      {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${token}`
-        }
-      }
-    );
+      // Create FormData for the file
+      const formData = new FormData();
+      formData.append("image", fs.createReadStream(tempFilePath), {
+          filename: "screenshot.png",
+          contentType: "image/png",
+      });
 
-    console.log("Screenshot uploaded successfully:", response.data);
+      // Get token from localStorage
+      const token = await mainWindow.webContents.executeJavaScript(
+          'localStorage.getItem("token")'
+      );
+
+      // Send request
+      const response = await axios.post(
+          `${BACKEND_URL}/screenshots/upload`,
+          formData,
+          {
+              headers: {
+                  ...formData.getHeaders(), // Correct content-type headers
+                  Authorization: `Bearer ${token}`, // JWT token
+              },
+          }
+      );
+
+      console.log("Screenshot uploaded successfully:", response.data);
+
+      // Clean up
+      fs.unlinkSync(tempFilePath);
   } catch (error) {
-    console.error("Error capturing or uploading screenshot:", error);
+      console.error("Error capturing or uploading screenshot:", error.response?.data || error);
   }
 }
 
@@ -193,6 +203,11 @@ const createWindow = () => {
     }
     sessionActive = true; // Mark the session as active.
     startBackgroundTasks();
+  });
+
+  ipcMain.on("session-end", () => {
+    console.log("Session gracefully ended");  
+    sessionActive = false;
   });
 
   mainWindow.loadURL(`file://${path.join(__dirname, 'dist', 'index.html')}`);

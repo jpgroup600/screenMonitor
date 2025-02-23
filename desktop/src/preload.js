@@ -11,5 +11,6 @@ contextBridge.exposeInMainWorld("electronAPI", {
   maximize: () => ipcRenderer.send("window-maximize"),
   close: () => ipcRenderer.send("window-close"),
   sessionStart: () => ipcRenderer.send("session-start"),
+  sessionEnd: () => ipcRenderer.send('session-end'),
   userActivity: () => ipcRenderer.send("user-activity"),
 });

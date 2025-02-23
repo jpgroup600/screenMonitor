@@ -14,6 +14,9 @@ const SessionStarted = () => {
       const endpoint = `/session/end`;
       const response = await request.post(endpoint, { projectId: String(projectId) });
       console.log("Session end response:", response);
+      if (window.electronAPI && window.electronAPI.sessionStart) {
+        window.electronAPI.sessionEnd();
+      }
       // Optionally, navigate back to the dashboard after ending the session.
       navigate("/");
     } catch (error) {
