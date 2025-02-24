@@ -60,7 +60,7 @@ export default function SessionDetails() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isModalOpen]);
+  }, [isModalOpen, selectedImage]);
 
   const handleImageClick = (index) => {
     setSelectedImage(index);
@@ -101,12 +101,17 @@ export default function SessionDetails() {
   const processedApps = processAppData();
 
   const renderDataSection = (title, icon, content) => (
-    <div className="bg-gradient-to-br from-[#1E2939] to-[#0F172A] rounded-xl p-4 sm:p-6 mb-4 sm:mb-6 shadow-2xl">
-      <div className="flex items-center gap-3 mb-4 sm:mb-6">
-        <div className="p-2 sm:p-3 bg-slate-800 rounded-lg">{icon}</div>
-        <h2 className="text-lg sm:text-xl font-semibold text-white">{title}</h2>
+    <div className="group relative bg-gradient-to-br from-[#1E2939] to-[#0F172A] rounded-xl p-6 border border-slate-700 shadow-xl hover:border-blue-500/30 transition-all duration-300 mb-6">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="p-3 bg-slate-800 rounded-lg border border-slate-700">
+          {React.cloneElement(icon, { className: 'text-blue-400' })}
+        </div>
+        <h2 className="text-xl font-semibold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
+          {title}
+        </h2>
       </div>
       {content}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent to-slate-900/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl pointer-events-none" />
     </div>
   );
 
@@ -117,9 +122,9 @@ export default function SessionDetails() {
   );
 
   const renderError = (message) => (
-    <div className="text-center py-8 sm:py-12 text-slate-400">
-      <FaExclamationTriangle className="text-3xl sm:text-4xl mx-auto mb-3 sm:mb-4 text-rose-400" />
-      <p className="text-sm sm:text-base font-medium">{message}</p>
+    <div className="text-center py-8 text-slate-400">
+      <FaExclamationTriangle className="text-4xl mx-auto mb-4 text-rose-400" />
+      <p className="text-base font-medium">{message}</p>
     </div>
   );
 
@@ -129,7 +134,7 @@ export default function SessionDetails() {
       label: 'Usage Time (minutes)',
       data: processedApps.map(app => app.totalUsage),
       backgroundColor: processedApps.map(app => 
-        app.appName.toLowerCase() === 'idle' ? '#f59e0b' : '#3b82f6'
+        app.appName.toLowerCase() === 'idle' ? 'rgb(251 191 36)' : 'rgb(59 130 246)'
       ),
       borderRadius: 8,
       barThickness: 32,
@@ -137,93 +142,86 @@ export default function SessionDetails() {
   };
 
   return (
-    <div className="bg-slate-900 min-h-screen p-4 sm:p-8">
-      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
-        <header className="flex items-center gap-3 sm:gap-4">
-          <FaClock className="text-3xl sm:text-4xl text-blue-400" />
-          <h1 className="text-2xl sm:text-3xl font-bold text-white">Session Analytics</h1>
-          <span className="text-sm sm:text-base text-slate-400 font-mono">#{sessionId.slice(0, 8)}</span>
+    <div className="min-h-screen p-8 bg-gradient-to-br from-[#1E2939] to-[#0F172A]">
+      <div className="max-w-7xl mx-auto space-y-6">
+        <header className="flex items-center gap-4 border-b border-slate-700/50 pb-6">
+          <FaClock className="text-4xl text-blue-400" />
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
+              Session Analytics
+            </h1>
+            <span className="text-sm text-slate-400 font-mono">#{sessionId.slice(0, 8)}</span>
+          </div>
         </header>
 
         {/* Application Insights Section */}
         {loadingApps ? renderLoading() : errorApps ? renderError(errorApps) : 
           renderDataSection(
             'Application Usage',
-            <FaTable className="text-xl sm:text-2xl text-blue-400" />,
+            <FaTable />,
             <>
-              <div className="h-80 sm:h-96 overflow-auto mb-4">
-                <div className="h-full min-w-[400px] sm:min-w-0">
-                  <Bar
-                    data={chartData}
-                    options={{
-                      responsive: true,
-                      maintainAspectRatio: false,
-                      plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                          backgroundColor: '#0F172A',
-                          titleColor: '#CBD5E1',
-                          bodyColor: '#E2E8F0',
-                          borderColor: '#1E293B',
-                          borderWidth: 1,
-                          callbacks: {
-                            label: (ctx) => `${ctx.dataset.label}: ${ctx.raw} mins`
-                          }
-                        }
-                      },
-                      scales: {
-                        y: {
-                          grid: { color: '#1E293B' },
-                          ticks: { color: '#94A3B8' },
-                        },
-                        x: {
-                          grid: { color: '#1E293B' },
-                          ticks: { color: '#94A3B8' }
-                        }
+              <div className="h-96 mb-6">
+                <Bar
+                  data={chartData}
+                  options={{
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { display: false },
+                      tooltip: {
+                        backgroundColor: '#0F172A',
+                        titleColor: '#CBD5E1',
+                        bodyColor: '#E2E8F0',
+                        borderColor: '#1E293B',
+                        borderWidth: 1,
+                        callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw} mins` }
                       }
-                    }}
-                  />
-                </div>
+                    },
+                    scales: {
+                      y: {
+                        grid: { color: '#1E293B' },
+                        ticks: { color: '#94A3B8' },
+                      },
+                      x: {
+                        grid: { color: '#1E293B' },
+                        ticks: { color: '#94A3B8' }
+                      }
+                    }
+                  }}
+                />
               </div>
 
-              <div className="overflow-x-auto rounded-lg border border-slate-700 max-h-[500px]">
+              <div className="overflow-x-auto rounded-lg border border-slate-700">
                 <table className="w-full">
-                  <thead className="bg-slate-800 sticky top-0">
+                  <thead className="bg-slate-800">
                     <tr>
-                      <th className="px-4 py-3 sm:px-6 sm:py-4 text-left text-slate-300 font-medium text-sm sm:text-base">Application</th>
-                      <th className="px-4 py-3 sm:px-6 sm:py-4 text-left text-slate-300 font-medium text-sm sm:text-base">Status</th>
-                      <th className="px-4 py-3 sm:px-6 sm:py-4 text-left text-slate-300 font-medium text-sm sm:text-base">Duration</th>
+                      <th className="px-6 py-4 text-left text-slate-300 font-medium">Application</th>
+                      <th className="px-6 py-4 text-left text-slate-300 font-medium">Status</th>
+                      <th className="px-6 py-4 text-left text-slate-300 font-medium">Duration</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700">
-                    {apps.map((app, index) => {
-                      const [h, m, s] = app.totalUsageTime.split(':').map(Number);
-                      return (
-                        <tr key={app.id} className="hover:bg-slate-800/50 transition-colors">
-                          <td className="px-4 py-3 sm:px-6 sm:py-4">
-                            <span className={`font-medium text-sm sm:text-base ${
-                              app.appName.toLowerCase() === 'idle' ? 'text-amber-400' : 'text-white'
-                            }`}>
-                              {app.appName}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 sm:px-6 sm:py-4">
-                            <span className={`inline-flex items-center px-2 py-1 sm:px-3 sm:py-1 rounded-full text-xs sm:text-sm ${
-                              app.status === 'Active' 
-                                ? 'bg-emerald-900/30 text-emerald-400' 
-                                : 'bg-slate-700/30 text-slate-400'
-                            }`}>
-                              {app.status}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 sm:px-6 sm:py-4 text-slate-200 text-sm sm:text-base">
-                            {h > 0 && `${h}h `}
-                            {m > 0 && `${m}m `}
-                            {s}s
-                          </td>
-                        </tr>
-                      )
-                    })}
+                    {apps.map((app) => (
+                      <tr key={app.id} className="hover:bg-slate-800/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <span className={`font-medium ${app.appName.toLowerCase() === 'idle' ? 'text-amber-400' : 'text-slate-200'}`}>
+                            {app.appName}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm ${
+                            app.status === 'Active' 
+                              ? 'bg-emerald-900/30 text-emerald-400' 
+                              : 'bg-slate-700/30 text-slate-400'
+                          }`}>
+                            {app.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-slate-200">
+                          {app.totalUsageTime}
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
@@ -235,13 +233,13 @@ export default function SessionDetails() {
         {loadingScreenshots ? renderLoading() : errorScreenshots ? renderError(errorScreenshots) : 
           renderDataSection(
             'Session Screenshots',
-            <FaImage className="text-xl sm:text-2xl text-purple-400" />,
+            <FaImage />,
             screenshots.length > 0 ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3 overflow-y-auto max-h-[800px]">
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                 {screenshots.map((screenshot, index) => (
                   <div 
                     key={index}
-                    className="relative group overflow-hidden rounded-lg aspect-video bg-slate-800 transition-transform hover:scale-[1.02] cursor-zoom-in"
+                    className="relative group overflow-hidden rounded-lg aspect-video bg-slate-800 border border-slate-700 transition-all hover:border-blue-500/30 cursor-zoom-in"
                     onClick={() => handleImageClick(index)}
                   >
                     <img
@@ -250,21 +248,18 @@ export default function SessionDetails() {
                       className="w-full h-full object-cover"
                       loading="lazy"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-transparent p-2 sm:p-3 flex items-end opacity-0 group-hover:opacity-100 transition-opacity">
-                      <span className="text-xs sm:text-sm text-slate-300">
-                        {new Date(screenshot.timestamp).toLocaleTimeString([], {
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
+                    <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-transparent p-3 flex items-end opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-sm text-slate-300">
+                        {new Date(screenshot.timestamp).toLocaleTimeString()}
                       </span>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-center py-8 sm:py-12 text-slate-400">
-                <FaImage className="text-3xl sm:text-4xl mx-auto mb-3 sm:mb-4" />
-                <p className="text-sm sm:text-base font-medium">No screenshots available</p>
+              <div className="text-center py-8 text-slate-400">
+                <FaImage className="text-4xl mx-auto mb-4 text-slate-600" />
+                <p className="text-base font-medium">No screenshots available</p>
               </div>
             )
           )
@@ -272,46 +267,44 @@ export default function SessionDetails() {
 
         {/* Lightbox Modal */}
         {isModalOpen && (
-          <div className="fixed inset-0 z-50 bg-slate-900/95 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
-            <div 
-              className="relative w-full max-w-6xl h-full max-h-[90vh]"
-              onClick={closeModal}
-            >
+          <div className="fixed inset-0 z-50 bg-slate-900/95 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="relative w-full max-w-6xl h-full max-h-[90vh]">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   navigateImage('prev');
                 }}
-                className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 text-white hover:text-blue-400 transition-colors z-10"
+                className="absolute left-4 top-1/2 -translate-y-1/2 p-3 text-white hover:text-blue-400 transition-colors z-10"
               >
-                <FaChevronLeft className="text-2xl sm:text-3xl" />
+                <FaChevronLeft className="text-3xl" />
               </button>
+              
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   navigateImage('next');
                 }}
-                className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 p-2 sm:p-3 text-white hover:text-blue-400 transition-colors z-10"
+                className="absolute right-4 top-1/2 -translate-y-1/2 p-3 text-white hover:text-blue-400 transition-colors z-10"
               >
-                <FaChevronRight className="text-2xl sm:text-3xl" />
+                <FaChevronRight className="text-3xl" />
               </button>
 
               <button
                 onClick={closeModal}
-                className="absolute top-2 sm:top-4 right-2 sm:right-4 p-1 sm:p-2 text-white hover:text-rose-400 transition-colors z-10"
+                className="absolute top-4 right-4 p-2 text-white hover:text-rose-400 transition-colors z-10"
               >
-                <FaTimes className="text-xl sm:text-2xl" />
+                <FaTimes className="text-2xl" />
               </button>
 
-              <div className="relative h-full flex items-center justify-center" onClick={e => e.stopPropagation()}>
+              <div className="relative h-full flex items-center justify-center" onClick={closeModal}>
                 <img
                   src={screenshots[selectedImage]?.url}
                   alt={`Fullscreen view ${selectedImage + 1}`}
-                  className="max-w-full max-h-full object-contain rounded-lg shadow-xl"
+                  className="max-w-full max-h-full object-contain rounded-lg shadow-xl border border-slate-700"
                 />
                 
-                <div className="absolute bottom-2 sm:bottom-4 left-2 sm:left-4 right-2 sm:right-4 text-center">
-                  <span className="inline-block bg-slate-800/80 text-slate-200 px-3 py-1 sm:px-4 sm:py-2 rounded-lg text-xs sm:text-sm">
+                <div className="absolute bottom-4 left-4 right-4 text-center">
+                  <span className="inline-block bg-slate-800/80 text-slate-200 px-4 py-2 rounded-lg text-sm">
                     {new Date(screenshots[selectedImage]?.createdAt).toLocaleString([], {
                       year: 'numeric',
                       month: 'short',

@@ -1,4 +1,3 @@
-// src/Components/EmployeeRegisterForm.jsx
 import React, { useState } from 'react';
 import { FaSpinner } from 'react-icons/fa';
 import { MdPerson, MdEmail, MdLock, MdWork, MdPhone } from 'react-icons/md';
@@ -27,27 +26,30 @@ export default function EmployeeRegisterForm({ onClose, refreshEmployees }) {
         role: 'Employee'
       };
       await request.post('/employee/register', newEmployee);
-      // Refresh the employee list after successful registration.
       if (refreshEmployees) refreshEmployees();
       onClose();
     } catch (err) {
       console.error('Registration error:', err);
-      setError('Registration failed. Please try again.');
+      setError('Registration failed. Please check details and try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
-      <div className="bg-[#121222] rounded-xl p-8 w-full max-w-md shadow-xl relative">
-        <h2 className="text-2xl font-bold mb-6 text-center">Register New Employee</h2>
-        {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm">
+      <div className="bg-gradient-to-br from-[#1E2939] to-[#0F172A] rounded-xl p-8 w-full max-w-md shadow-2xl border border-slate-700 relative">
+        <h2 className="text-2xl font-bold mb-6 text-center bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
+          Register New Employee
+        </h2>
+        
+        {error && <p className="text-rose-400 mb-4 text-center text-sm">{error}</p>}
+
         <form onSubmit={handleRegister} className="space-y-4">
           {/* Full Name Field */}
           <div className="relative">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-              <MdPerson className="text-teal-500" size={20} />
+              <MdPerson className="text-blue-400" size={20} />
             </span>
             <input
               type="text"
@@ -55,13 +57,14 @@ export default function EmployeeRegisterForm({ onClose, refreshEmployees }) {
               onChange={(e) => setFullName(e.target.value)}
               required
               placeholder="John Doe"
-              className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors"
+              className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
             />
           </div>
+
           {/* Email Field */}
           <div className="relative">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-              <MdEmail className="text-teal-500" size={20} />
+              <MdEmail className="text-blue-400" size={20} />
             </span>
             <input
               type="email"
@@ -69,13 +72,14 @@ export default function EmployeeRegisterForm({ onClose, refreshEmployees }) {
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="john@example.com"
-              className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors"
+              className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
             />
           </div>
+
           {/* Password Field */}
           <div className="relative">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-              <MdLock className="text-teal-500" size={20} />
+              <MdLock className="text-blue-400" size={20} />
             </span>
             <input
               type="password"
@@ -83,13 +87,14 @@ export default function EmployeeRegisterForm({ onClose, refreshEmployees }) {
               onChange={(e) => setPassword(e.target.value)}
               required
               placeholder="Enter password"
-              className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors"
+              className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
             />
           </div>
+
           {/* Designation Field */}
           <div className="relative">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-              <MdWork className="text-teal-500" size={20} />
+              <MdWork className="text-blue-400" size={20} />
             </span>
             <input
               type="text"
@@ -97,13 +102,14 @@ export default function EmployeeRegisterForm({ onClose, refreshEmployees }) {
               onChange={(e) => setDesignation(e.target.value)}
               required
               placeholder="Software Engineer"
-              className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors"
+              className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
             />
           </div>
+
           {/* Phone Number Field */}
           <div className="relative">
             <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-              <MdPhone className="text-teal-500" size={20} />
+              <MdPhone className="text-blue-400" size={20} />
             </span>
             <input
               type="text"
@@ -111,26 +117,28 @@ export default function EmployeeRegisterForm({ onClose, refreshEmployees }) {
               onChange={(e) => setPhoneNumber(e.target.value)}
               required
               placeholder="123-456-7890"
-              className="w-full pl-10 pr-4 py-2 rounded-lg bg-gray-700 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500 transition-colors"
+              className="w-full pl-10 pr-4 py-2 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-colors"
             />
           </div>
+
           {/* Action Buttons */}
-          <div className="flex justify-end gap-4 mt-6">
+          <div className="flex justify-end gap-3 mt-6">
             <button
               type="button"
               onClick={onClose}
-              className="bg-gray-600 hover:bg-gray-500 text-white px-4 py-2 rounded-lg transition duration-200"
+              className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-800/50 hover:border-slate-500 transition-all"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="bg-[#0068f7] hover:bg-[#005ac7] text-white px-4 py-2 rounded-lg transition duration-200 flex items-center justify-center"
+              className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg hover:shadow-[0_0_20px_-3px_rgba(59,130,246,0.4)] transition-all flex items-center justify-center disabled:opacity-70"
             >
               {loading ? (
                 <>
-                  <FaSpinner className="animate-spin mr-2" size={16} /> Registering...
+                  <FaSpinner className="animate-spin mr-2" size={16} />
+                  Registering...
                 </>
               ) : (
                 'Register'

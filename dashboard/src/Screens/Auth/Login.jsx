@@ -1,37 +1,30 @@
 // src/Components/Login.jsx
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom'; // Import useNavigate
+import { useNavigate } from 'react-router-dom';
 import { MdEmail, MdLock } from 'react-icons/md';
 import { FaSpinner } from 'react-icons/fa';
-import request from '../../Actions/request'; // Adjust the path as needed
+import request from '../../Actions/request';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  
-  const navigate = useNavigate(); // Initialize navigate
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
-    e.preventDefault(); // Prevent page refresh
+    e.preventDefault();
     setLoading(true);
     setError(null);
 
     try {
-      // Send a POST request to the /admin/login endpoint with the email and password
       const response = await request.post('/admin/login', { email, password });
-      
-      // Assume the response contains a token property. Store it in localStorage.
-      if (response && response.token) {
+      if (response?.token) {
         localStorage.setItem('token', response.token);
         navigate('/');
-        window.location.reload(); // Forces the entire app to reload
-      } else {
-        throw new Error('Token not found in response');
+        window.location.reload();
       }
     } catch (err) {
-      console.error('Login error:', err);
       setError('Invalid credentials. Please try again.');
     } finally {
       setLoading(false);
@@ -39,60 +32,71 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#020617] p-4">
-      <div className="bg-[#121222] rounded-xl p-8 w-full max-w-md shadow-xl">
-        <h2 className="text-white text-2xl mb-6 text-center">Login</h2>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1E2939] to-[#0F172A] p-4">
+      <div className="bg-gradient-to-br from-[#1E2939] to-[#0F172A] rounded-xl p-8 w-full max-w-md shadow-2xl border border-slate-700">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
+            Welcome Back
+          </h2>
+          <p className="text-slate-400 mt-2">Sign in to continue</p>
+        </div>
 
-        {error && <p className="text-red-500 mb-4 text-center">{error}</p>}
+        {error && (
+          <div className="mb-6 p-3 bg-rose-900/30 text-rose-400 rounded-lg text-center border border-rose-800/50">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Email Field */}
-          <div className="relative">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-              <MdEmail className="text-teal-500" size={20} />
-            </span>
-            <input
-              id="email"
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-[#020617] text-white rounded-lg pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
-              placeholder="Enter your email"
-            />
+          <div className="space-y-4">
+            {/* Email Input */}
+            <div className="group relative">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3">
+                <MdEmail className="text-slate-400 group-focus-within:text-blue-400 transition-colors" size={20} />
+              </div>
+              <input
+                id="email"
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-slate-900/50 text-slate-300 rounded-lg pl-10 pr-4 py-3 border border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 outline-none transition-all"
+                placeholder="Email address"
+              />
+            </div>
+
+            {/* Password Input */}
+            <div className="group relative">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-3">
+                <MdLock className="text-slate-400 group-focus-within:text-blue-400 transition-colors" size={20} />
+              </div>
+              <input
+                id="password"
+                type="password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="w-full bg-slate-900/50 text-slate-300 rounded-lg pl-10 pr-4 py-3 border border-slate-700 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 outline-none transition-all"
+                placeholder="Password"
+              />
+            </div>
           </div>
 
-          {/* Password Field */}
-          <div className="relative">
-            <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-              <MdLock className="text-teal-500" size={20} />
-            </span>
-            <input
-              id="password"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-[#020617] text-white rounded-lg pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-teal-500"
-              placeholder="Enter your password"
-            />
-          </div>
-
-          <div className="flex justify-end">
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded-lg transition-all duration-300 flex items-center justify-center"
-            >
-              {loading ? (
-                <>
-                  <FaSpinner className="animate-spin mr-2" size={18} /> Logging in...
-                </>
-              ) : (
-                'Login'
-              )}
-            </button>
-          </div>
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full bg-gradient-to-r from-blue-600 to-blue-700 text-white py-3 rounded-lg font-medium hover:shadow-[0_0_20px_-3px_rgba(59,130,246,0.4)] transition-all relative overflow-hidden"
+          >
+            {loading ? (
+              <span className="flex items-center justify-center">
+                <FaSpinner className="animate-spin mr-2" size={18} />
+                Authenticating...
+              </span>
+            ) : (
+              <span className="relative z-10">Sign In</span>
+            )}
+            <div className="absolute inset-0 bg-white/5 opacity-0 hover:opacity-100 transition-opacity" />
+          </button>
         </form>
       </div>
     </div>

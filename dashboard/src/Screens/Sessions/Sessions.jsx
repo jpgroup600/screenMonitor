@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import SessionCard from "../../Components/Session/SessionCard";
-import { FaClock } from "react-icons/fa";
+import { FaClock, FaSpinner } from "react-icons/fa";
 import request from "../../Actions/request";
-
 
 export default function Sessions() {
   const { employeeId, projectId } = useParams();
@@ -32,9 +31,10 @@ export default function Sessions() {
 
   if (loading) {
     return (
-      <div className="w-full min-h-screen p-8 lg:p-0">
-        <div className="max-w-4xl mx-auto text-white text-center">
-          Loading sessions...
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1E2939] to-[#0F172A]">
+        <div className="flex items-center gap-3 text-blue-400">
+          <FaSpinner className="animate-spin" size={24} />
+          <span>Loading sessions...</span>
         </div>
       </div>
     );
@@ -42,8 +42,8 @@ export default function Sessions() {
 
   if (error) {
     return (
-      <div className="w-full min-h-screen p-8 lg:p-0">
-        <div className="max-w-4xl mx-auto text-red-400 text-center">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1E2939] to-[#0F172A]">
+        <div className="text-rose-400 text-center p-8 max-w-2xl">
           Error: {error}
         </div>
       </div>
@@ -51,20 +51,20 @@ export default function Sessions() {
   }
 
   return (
-    <div className="w-full min-h-screen p-8 lg:p-0">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold text-white mb-8 flex items-center gap-3">
+    <div className="min-h-screen p-8 bg-gradient-to-br from-[#1E2939] to-[#0F172A]">
+      <div className="max-w-7xl mx-auto">
+        <h1 className="text-3xl font-bold mb-8 flex items-center gap-3 bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
           <FaClock className="text-blue-400" />
           Work Sessions
         </h1>
         
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {sessions.length > 0 ? (
             sessions.map((session) => (
               <SessionCard key={session.sessionId} session={session} />
             ))
           ) : (
-            <div className="text-gray-400 text-center">
+            <div className="col-span-full text-center text-slate-400 py-8">
               No sessions found for this employee/project
             </div>
           )}

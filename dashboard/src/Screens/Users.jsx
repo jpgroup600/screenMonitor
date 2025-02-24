@@ -36,12 +36,14 @@ export default function Users() {
   );
 
   return (
-    <div className="min-h-screen p-8 bg-[#020617] text-white">
+    <div className="min-h-screen p-8 bg-gradient-to-br from-[#1E2939] to-[#0F172A]">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-3xl font-bold">Employees</h1>
+        <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
+          Employees
+        </h1>
         <button
           onClick={() => setIsRegisterModalOpen(true)}
-          className="bg-[#0068f7] hover:bg-[#005ac7] text-white px-4 py-2 rounded-lg transition duration-200"
+          className="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2 rounded-lg hover:shadow-[0_0_20px_-3px_rgba(59,130,246,0.4)] transition-all"
         >
           Sign Up New Employee
         </button>
@@ -53,15 +55,16 @@ export default function Users() {
           placeholder="Search employees..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
-          className="w-full p-3 rounded-lg bg-[#121222] text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-teal-500"
+          className="w-full p-3 rounded-lg bg-slate-900/50 border border-slate-700 text-slate-300 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
         />
       </div>
 
-      {loadingEmployees ? (
-        <div className="flex justify-center items-center">
+      {/* Loading spinner */}
+      {loadingEmployees && (
+        <div className="flex justify-center items-center py-12">
           <div className="animate-spin">
             <svg
-              className="h-12 w-12 text-white"
+              className="h-12 w-12 text-blue-400"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -71,10 +74,16 @@ export default function Users() {
             </svg>
           </div>
         </div>
-      ) : filteredEmployees.length === 0 ? (
-        <p className="text-center text-gray-400">No employees found.</p>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      )}
+
+      {/* No results */}
+      {!loadingEmployees && filteredEmployees.length === 0 && (
+        <p className="text-center text-slate-400 py-8">No employees found.</p>
+      )}
+
+      {/* Employee cards grid */}
+      {!loadingEmployees && filteredEmployees.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {filteredEmployees.map((employee) => (
             <EmployeeCardWithStatus
               key={employee.id}
@@ -85,6 +94,7 @@ export default function Users() {
         </div>
       )}
 
+      {/* Registration modal */}
       {isRegisterModalOpen && (
         <EmployeeRegisterForm
           onClose={() => setIsRegisterModalOpen(false)}

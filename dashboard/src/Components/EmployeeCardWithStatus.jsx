@@ -2,18 +2,30 @@ import React from 'react';
 
 export default function EmployeeCardWithStatus({ employee, isOnline }) {
   return (
-    <div className="bg-gray-800 rounded-xl p-6 shadow-md hover:shadow-xl transition-transform duration-300 hover:scale-105">
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xl font-bold">{employee.fullName}</h2>
+    <div className="group relative bg-gradient-to-br from-[#1E2939] to-[#0F172A] rounded-xl p-6 border border-slate-700 hover:border-blue-500/30 transition-all duration-300 cursor-pointer hover:scale-[1.02] shadow-xl hover:shadow-2xl">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-lg font-semibold text-blue-300 truncate">
+          {employee.fullName}
+        </h2>
         {/* Online status indicator */}
-        <div
-          className={`w-3 h-3 rounded-full ${isOnline ? 'bg-green-500' : 'bg-gray-500'}`}
-          title={isOnline ? 'Online' : 'Offline'}
-        ></div>
+        <div className="flex items-center gap-2">
+          <div
+            className={`w-2.5 h-2.5 rounded-full ${
+              isOnline 
+                ? 'bg-gradient-to-r from-green-500 to-emerald-500' 
+                : 'bg-gradient-to-r from-slate-500 to-slate-600'
+            } border border-slate-600`}
+            title={isOnline ? 'Online' : 'Offline'}
+          ></div>
+        </div>
       </div>
-      <p className="text-sm text-gray-400">{employee.email}</p>
-      <p className="text-sm text-gray-400">Role: {employee.role}</p>
-      <p className="text-sm text-gray-400">Designation: {employee.designation}</p>
+      
+      <p className="text-slate-400 text-sm mb-2 truncate">{employee.email}</p>
+      <p className="text-slate-400 text-sm">Role: {employee.role}</p>
+      <p className="text-slate-400 text-sm truncate">Designation: {employee.designation}</p>
+
+      {/* Hover overlay */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent to-slate-900/50 opacity-0 group-hover:opacity-100 transition-opacity rounded-xl pointer-events-none" />
     </div>
   );
 }
