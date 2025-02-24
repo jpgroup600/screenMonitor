@@ -3,25 +3,22 @@ const { FuseV1Options, FuseVersion } = require("@electron/fuses");
 
 module.exports = {
   packagerConfig: {
-    // Package your app into an ASAR archive
-    asar: true,
-    // Name for your app (used by Electron Packager)
+    asar: {
+      unpackDir: "node_modules/screenshot-desktop",
+    },
     name: "ETracker",
-    // The executable name (without .exe)
     executableName: "ETracker",
-    
-    extraResource: ['.env']
+    extraResource: [".env"]
   },
   rebuildConfig: {},
   makers: [
     {
       name: "@electron-forge/maker-squirrel",
       config: {
-        name: "ETracker",         // Required for Squirrel
-        authors: "mrnobo09",    
+        name: "ETracker",
+        authors: "mrnobo09",
         exe: "ETracker.exe",
         setupExe: "ETrackerSetup.exe",
-        // setupIcon: "./assets/icon.ico", // Uncomment & provide an icon if you have one
       },
     },
     {
@@ -32,7 +29,6 @@ module.exports = {
       name: "@electron-forge/maker-deb",
       config: {
         options: {
-          // Setting the install directory to a location inside /usr so that the package structure is correct
           installDirectory: "/usr/lib/ETracker"
         }
       },
@@ -41,7 +37,6 @@ module.exports = {
       name: "@electron-forge/maker-rpm",
       config: {
         options: {
-          // For RPM, use a similar directory inside /usr
           installDirectory: "/usr/lib/ETracker"
         }
       },
