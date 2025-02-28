@@ -5,7 +5,8 @@ const FormData = require('form-data');
 const started = require('electron-squirrel-startup');
 const axios = require('axios');
 const screenshot = require('screenshot-desktop');
-const { Blob } = require('buffer');
+const PImage = require('pureimage');
+const { Readable } = require('stream');
 
 // Determine if we're running in production (packaged) by checking NODE_ENV or if __dirname contains "app.asar"
 const isProd = process.env.NODE_ENV === 'production' || __dirname.includes('app.asar');
@@ -96,25 +97,47 @@ async function captureAndSendScreenshot() {
 
   console.log("Capturing screenshot...");
   try {
+    // Capture screenshot as PNG buffer.
     const imgBuffer = await screenshot({ format: "png" });
+    
+    // Decode the PNG buffer using PureImage.
+    const img = await PImage.decodePNGFromStream(Readable.from(imgBuffer));
+    
+    // Calculate new dimensions to fit within 1280x720 while preserving aspect ratio.
+    const originalWidth = img.width;
+    const originalHeight = img.height;
+    const maxWidth = 1280;
+    const maxHeight = 720;
+    const ratio = Math.min(maxWidth / originalWidth, maxHeight / originalHeight);
+    const destWidth = Math.round(originalWidth * ratio);
+    const destHeight = Math.round(originalHeight * ratio);
+    
+    // Create a new image canvas with the target dimensions.
+    const outImg = PImage.make(destWidth, destHeight);
+    const ctx = outImg.getContext('2d');
+    // Draw the original image scaled to the new dimensions.
+    ctx.drawImage(img, 0, 0, originalWidth, originalHeight, 0, 0, destWidth, destHeight);
 
-    // Save image to a temp file
+    // Write the resized image to a temporary file.
     const tempFilePath = "screenshot.png";
-    fs.writeFileSync(tempFilePath, imgBuffer);
+    await new Promise((resolve, reject) => {
+      const outStream = fs.createWriteStream(tempFilePath);
+      PImage.encodePNGToStream(outImg, outStream)
+        .then(resolve)
+        .catch(reject);
+    });
 
-    // Create FormData for the file
+    // Prepare FormData for upload.
     const formData = new FormData();
     formData.append("image", fs.createReadStream(tempFilePath), {
       filename: "screenshot.png",
       contentType: "image/png",
     });
 
-    // Get token from localStorage
-    const token = await mainWindow.webContents.executeJavaScript(
-      'localStorage.getItem("token")'
-    );
+    // Retrieve token from the renderer.
+    const token = await mainWindow.webContents.executeJavaScript('localStorage.getItem("token")');
 
-    // Send request
+    // Upload the screenshot.
     const response = await axios.post(
       `${BACKEND_URL}/screenshots/upload`,
       formData,
@@ -128,7 +151,7 @@ async function captureAndSendScreenshot() {
 
     console.log("Screenshot uploaded successfully:", response.data);
 
-    // Clean up
+    // Clean up the temporary file.
     fs.unlinkSync(tempFilePath);
   } catch (error) {
     console.error("Error capturing or uploading screenshot:", error.response?.data || error);
