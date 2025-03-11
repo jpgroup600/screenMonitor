@@ -119,7 +119,8 @@ async function captureAndSendScreenshot() {
     ctx.drawImage(img, 0, 0, originalWidth, originalHeight, 0, 0, destWidth, destHeight);
 
     // Write the resized image to a temporary file.
-    const tempFilePath = "screenshot.png";
+    const tempFilePath = path.join(app.getPath('temp'),'screenshot.png')
+    
     await new Promise((resolve, reject) => {
       const outStream = fs.createWriteStream(tempFilePath);
       PImage.encodePNGToStream(outImg, outStream)
