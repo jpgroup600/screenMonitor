@@ -120,6 +120,8 @@ async function captureAndSendScreenshot() {
 
     // Write the resized image to a temporary file.
     const tempFilePath = path.join(app.getPath('temp'),'screenshot.png')
+    //const tempFilePath = path.join(app.getPath('temp'), 'screenshot.png');
+    console.log('Temp File Path:', tempFilePath);
     
     await new Promise((resolve, reject) => {
       const outStream = fs.createWriteStream(tempFilePath);
@@ -182,7 +184,7 @@ const createWindow = () => {
     titleBarStyle: 'hidden',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      devTools: false,
+      devTools: true,
     },
   });
 
