@@ -238,6 +238,11 @@ const createWindow = () => {
   mainWindow.loadURL(`file://${path.join(__dirname, 'dist', 'index.html')}`);
 };
 
+app.setLoginItemSettings({
+  openAtLogin: true,
+  openAsHidden: false, 
+});
+
 app.whenReady().then(() => {
   createWindow();
   app.on('activate', () => {
