@@ -13,4 +13,5 @@ contextBridge.exposeInMainWorld("electronAPI", {
   sessionStart: () => ipcRenderer.send("session-start"),
   sessionEnd: () => ipcRenderer.send('session-end'),
   userActivity: () => ipcRenderer.send("user-activity"),
+  captureScreenshot: () => ipcRenderer.invoke('capture-screenshot'),
 });

@@ -45,11 +45,11 @@ export default function EmployeeCardSession({ employee, isOnline, projectId }) {
           onMouseLeave={() => setShowPopup(false)}
         >
           <div className="h-60 border-b border-slate-700 relative">
-            <img 
+            {employee.recentScreenshot && (<img 
               src={`${import.meta.env.VITE_IMAGE_URL}/${employee.recentScreenshot.split(/[\\/]/).pop()}`} 
               alt="Recent activity" 
               className="w-full h-full object-contain bg-[#0F172A]"
-            />
+            />)}
             <div className="absolute top-2 left-2 bg-slate-900/80 text-blue-300 text-xs px-2 py-1 rounded">
               Recent Activity
             </div>

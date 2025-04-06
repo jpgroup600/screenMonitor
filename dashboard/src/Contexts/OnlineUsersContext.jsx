@@ -4,65 +4,73 @@ import * as signalR from "@microsoft/signalr";
 export const OnlineUsersContext = createContext();
 
 export const OnlineUsersProvider = ({ children }) => {
-  const [onlineUserIds, setOnlineUserIds] = useState([]);
-  const [screenHubConnection, setScreenHubConnection] = useState(null);
+  const [onlineUserIds, setOnlineUserIds] = useState([]);  // Storing user ids
+  const [hubConnection, setHubConnection] = useState(null);
 
   // User Activity Hub Connection
   useEffect(() => {
-    const userActivityConnection = new signalR.HubConnectionBuilder()
+    const connection = new signalR.HubConnectionBuilder()
       .withUrl("http://141.164.41.199:8080/api/useractivityhub", {
         accessTokenFactory: () => localStorage.getItem("token"),
       })
       .withAutomaticReconnect()
+      .configureLogging(signalR.LogLevel.Warning)
       .build();
 
-    userActivityConnection
-      .start()
+    // Start connection
+    connection.start()
       .then(() => {
-        console.log("Connected to User Activity Hub");
-        userActivityConnection.invoke("GetOnlineUsers");
+        console.log("Connected to UserActivityHub");
+        connection.invoke("GetOnlineUsers");
+        setHubConnection(connection);
       })
-      .catch((error) => console.error("User Activity Hub connection error:", error));
+      .catch((error) => console.error("Connection error:", error));
 
-    userActivityConnection.on("ReceiveOnlineUsers", (users) => {
+    // Event handlers
+    connection.on("ReceiveOnlineUsers", (users) => {
       setOnlineUserIds(users.map((u) => u.key));
     });
 
-    userActivityConnection.on("UserStatusChanged", (userId, role, isOnline) => {
-      setOnlineUserIds((prevIds) => 
-        isOnline 
-          ? [...new Set([...prevIds, userId])] 
+    connection.on("UserStatusChanged", (userId, role, isOnline) => {
+      setOnlineUserIds((prevIds) =>
+        isOnline
+          ? [...new Set([...prevIds, userId])]
           : prevIds.filter((id) => id !== userId)
       );
     });
 
-    return () => userActivityConnection.stop();
+    // Cleanup
+    return () => {
+      if (connection) connection.stop();
+    };
   }, []);
 
-  // Screen Hub Connection
-  useEffect(() => {
-    const screenConnection = new signalR.HubConnectionBuilder()
-      .withUrl("http://141.164.41.199:8080/api/screenHub", {
-        accessTokenFactory: () => localStorage.getItem("token"),
-      })
-      .withAutomaticReconnect()
-      .build();
+  // Function to request screenshots from specific users
+  const requestScreenshots = (userIds = []) => {
 
-    screenConnection
-      .start()
-      .then(() => {
-        console.log("Connected to Screen Hub");
-        setScreenHubConnection(screenConnection);
-      })
-      .catch((error) => console.error("Screen Hub connection error:", error));
+    console.log("screenshot requested")
+    if (!hubConnection) {
+      console.error("No active connection to hub");
+      return Promise.reject("No connection");
+    }
 
-    return () => screenConnection.stop();
-  }, []);
+    if (userIds.length === 0) {
+      // Request from all active users
+      return hubConnection.invoke("RequestScreenshotsFromActiveEmployees");
+    } else {
+      // Request from specific users
+      return Promise.all(
+        userIds.map((userId) =>
+          hubConnection.invoke("RequestUserScreenshot", userId)
+        )
+      );
+    }
+  };
 
   return (
     <OnlineUsersContext.Provider value={{ 
       onlineUserIds, 
-      screenHubConnection 
+      requestScreenshots 
     }}>
       {children}
     </OnlineUsersContext.Provider>

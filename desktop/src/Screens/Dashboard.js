@@ -1,7 +1,13 @@
 import React, { useState, useEffect } from "react";
 import request from "../Actions/request";
 import ProjectCard from "../Components/ProjectCard";
-import { FaTachometerAlt, FaSpinner, FaExclamationTriangle, FaPlay } from "react-icons/fa";
+import { 
+  FaTachometerAlt, 
+  FaSpinner, 
+  FaExclamationTriangle, 
+  FaPlay,
+  FaSignOutAlt 
+} from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 
 const Dashboard = () => {
@@ -12,7 +18,7 @@ const Dashboard = () => {
   const [selectedProjectId, setSelectedProjectId] = useState(null);
   const navigate = useNavigate();
 
-  // Fetch user ID from local storage.
+  // Fetch user ID from local storage
   useEffect(() => {
     const storedUserId = localStorage.getItem("userId");
     if (storedUserId) {
@@ -20,7 +26,7 @@ const Dashboard = () => {
     }
   }, []);
 
-  // Fetch projects when the userId is available.
+  // Fetch projects when userId is available
   useEffect(() => {
     if (!userId) return;
 
@@ -41,10 +47,10 @@ const Dashboard = () => {
     fetchProjects();
   }, [userId]);
 
-  // Listen for user activity events (both mouse and keyboard) and send them to the main process.
+  // Track user activity
   useEffect(() => {
     const handleUserActivity = () => {
-      if (window.electronAPI && window.electronAPI.userActivity) {
+      if (window.electronAPI?.userActivity) {
         window.electronAPI.userActivity();
       }
     };
@@ -58,28 +64,25 @@ const Dashboard = () => {
     };
   }, []);
 
-  // Handle project selection.
   const handleSelectProject = (projectId) => {
     setSelectedProjectId(projectId);
   };
 
-  // Handle starting the session.
   const handleStartSession = async () => {
     if (!selectedProjectId) {
       alert("Please select a project to start the session.");
       return;
     }
     try {
-  
-      const response = await request.post('/session/start', { projectId: String(selectedProjectId) });
+      const response = await request.post('/session/start', { 
+        projectId: String(selectedProjectId) 
+      });
       console.log("Session start response:", response);
 
-      // Notify the main process to start session tasks (minimizing the window, etc.).
-      if (window.electronAPI && window.electronAPI.sessionStart) {
+      if (window.electronAPI?.sessionStart) {
         window.electronAPI.sessionStart();
       }
 
-      // Navigate to the SessionStarted page with the projectId as query parameter.
       navigate(`/sessionStarted?projectId=${selectedProjectId}`);
     } catch (error) {
       console.error("Failed to start session:", error);
@@ -87,19 +90,41 @@ const Dashboard = () => {
     }
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem("userId");
+    localStorage.removeItem("token");
+    
+    if (window.electronAPI?.logout) {
+      window.electronAPI.logout();
+    }
+    
+    navigate("/login");
+    window.location.reload();   
+  };
+
   return (
     <div className="w-full h-screen p-8 bg-gray-900 text-white overflow-y-auto">
-      {/* Dashboard header with icon */}
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-4xl font-bold flex items-center mb-4">
-          <FaTachometerAlt className="mr-3 text-blue-500" />
-          Dashboard
-        </h1>
+        {/* Header with Logout */}
+        <div className="flex justify-between items-center mb-4">
+          <h1 className="text-4xl font-bold flex items-center">
+            <FaTachometerAlt className="mr-3 text-blue-500" />
+            Dashboard
+          </h1>
+          <button
+            onClick={handleLogout}
+            className="flex items-center px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg transition-colors"
+          >
+            <FaSignOutAlt className="mr-2" />
+            Logout
+          </button>
+        </div>
+
         <p className="text-lg text-gray-400 mb-8">
           Welcome to the dashboard! Select a project to start your session.
         </p>
 
-        {/* Loading State with spinner icon */}
+        {/* Loading State */}
         {loading && (
           <div className="flex items-center justify-center p-8">
             <FaSpinner className="animate-spin mr-3 text-blue-500 text-2xl" />
@@ -107,7 +132,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Error State with alert icon */}
+        {/* Error State */}
         {error && (
           <div className="flex items-center justify-center p-8">
             <FaExclamationTriangle className="mr-3 text-red-500 text-2xl" />
@@ -129,7 +154,7 @@ const Dashboard = () => {
           </div>
         )}
 
-        {/* Start Session Button with play icon */}
+        {/* Start Session Button */}
         {!loading && !error && (
           <div className="fixed bottom-8 right-8">
             <button

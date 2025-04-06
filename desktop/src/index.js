@@ -1,88 +1,70 @@
 const { app, BrowserWindow, ipcMain, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const FormData = require('form-data'); 
+const FormData = require('form-data');
 const started = require('electron-squirrel-startup');
 const axios = require('axios');
 const screenshot = require('screenshot-desktop');
 const PImage = require('pureimage');
 const { Readable } = require('stream');
+const activeWin = require('active-win');
 
-// Determine if we're running in production (packaged) by checking NODE_ENV or if __dirname contains "app.asar"
+// Environment Configuration
 const isProd = process.env.NODE_ENV === 'production' || __dirname.includes('app.asar');
-// In production, the .env file should be located in the resources folder; in development, it's in the current directory.
 const envPath = isProd ? path.join(process.resourcesPath, '.env') : path.join(__dirname, '.env');
-console.log(`Loading .env from: ${envPath}`);
 require('dotenv').config({ path: envPath });
 
-if (started) {
-  app.quit();
-}
+if (started) app.quit();
 
+// Global Variables
 let mainWindow;
 const BACKEND_URL = process.env.BACKEND_URL;
-
-// Global flag to track whether a session has been started.
 let sessionActive = false;
+let currentForegroundApp = null;
+let isIdle = false;
+let backgroundIntervals = [];
 
-// Helper function to send session start/end requests to the backend.
-// The request body is exactly: { "appName": "string" }
+// Session Management Functions
 async function sendSessionRequest(type, appName) {
-  // type should be "start" or "end"
   const endpoint = `${BACKEND_URL}/sessionForegroundApp/${type}`;
-  const body = { appName: String(appName) };
+  const token = await mainWindow.webContents.executeJavaScript('localStorage.getItem("token")');
 
-  // Retrieve the token from renderer's localStorage.
-  let token = await mainWindow.webContents.executeJavaScript('localStorage.getItem("token")');
-  
-  console.log(`Sending ${type} request to ${endpoint} with body:`, body, 'and token:', token);
-  
   try {
-    const response = await axios.post(endpoint, body, {
+    await axios.post(endpoint, { appName: String(appName) }, {
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`,
-      },
+        'Authorization': `Bearer ${token}`
+      }
     });
-    // console.log(`${type} request sent for ${appName}:`, response.data);
   } catch (error) {
     console.error(`Error sending ${type} request for ${appName}:`, error);
   }
 }
 
-let currentForegroundApp = null;
-let isIdle = false;
-
-// Check and update the foreground application only if session is active.
+// Activity Monitoring
 async function updateForegroundApp() {
-  if (!sessionActive) return; // Only update when session is active.
-  
-  const activeWin = require('active-win');
-  console.log("Calling updateForegroundApp...");
+  if (!sessionActive) return;
+
   try {
     const result = await activeWin();
-    // If idle, force app name to "idle"; otherwise, use the active window's owner name.
-    let newApp = isIdle ? "idle" : (result && result.owner ? result.owner.name : "unknown");
+    const newApp = isIdle ? "idle" : (result?.owner?.name || "unknown");
 
-    // If the foreground app has changed, end the previous session (if any) and start a new one.
     if (newApp !== currentForegroundApp) {
-      if (currentForegroundApp !== null) {
+      if (currentForegroundApp) {
         await sendSessionRequest("end", currentForegroundApp);
       }
       currentForegroundApp = newApp;
-      await sendSessionRequest("start", currentForegroundApp);
+      await sendSessionRequest("start", newApp);
     }
   } catch (error) {
     console.error("Error fetching active window info:", error);
   }
 }
 
-// Check system idle time (in seconds) and update idle state (only if session is active).
 function checkIdleTime() {
   if (!sessionActive) return;
   
   const idleTime = powerMonitor.getSystemIdleTime();
-  // Adjust the idle threshold as needed (here it's set to 15 seconds for testing).
   if (idleTime >= 15 && !isIdle) {
     isIdle = true;
     updateForegroundApp();
@@ -92,91 +74,106 @@ function checkIdleTime() {
   }
 }
 
+// Screenshot Functions
 async function captureAndSendScreenshot() {
-  if (!sessionActive) return;
+  if (!sessionActive) return null;
 
-  console.log("Capturing screenshot...");
+  let tempFilePath;
   try {
-    // Capture screenshot as PNG buffer.
+    // Capture and process screenshot
     const imgBuffer = await screenshot({ format: "png" });
-    
-    // Decode the PNG buffer using PureImage.
     const img = await PImage.decodePNGFromStream(Readable.from(imgBuffer));
     
-    // Calculate new dimensions to fit within 1280x720 while preserving aspect ratio.
-    const originalWidth = img.width;
-    const originalHeight = img.height;
-    const maxWidth = 1280;
-    const maxHeight = 720;
-    const ratio = Math.min(maxWidth / originalWidth, maxHeight / originalHeight);
-    const destWidth = Math.round(originalWidth * ratio);
-    const destHeight = Math.round(originalHeight * ratio);
+    // Calculate dimensions with aspect ratio
+    const { width, height } = calculateDimensions(img.width, img.height);
+    const resizedImg = resizeImage(img, width, height);
     
-    // Create a new image canvas with the target dimensions.
-    const outImg = PImage.make(destWidth, destHeight);
-    const ctx = outImg.getContext('2d');
-    // Draw the original image scaled to the new dimensions.
-    ctx.drawImage(img, 0, 0, originalWidth, originalHeight, 0, 0, destWidth, destHeight);
-
-    // Write the resized image to a temporary file.
-    const tempFilePath = path.join(app.getPath('temp'),'screenshot.png')
-    //const tempFilePath = path.join(app.getPath('temp'), 'screenshot.png');
-    console.log('Temp File Path:', tempFilePath);
+    // Save to temp file
+    tempFilePath = await saveTempImage(resizedImg);
     
-    await new Promise((resolve, reject) => {
-      const outStream = fs.createWriteStream(tempFilePath);
-      PImage.encodePNGToStream(outImg, outStream)
-        .then(resolve)
-        .catch(reject);
-    });
-
-    // Prepare FormData for upload.
-    const formData = new FormData();
-    formData.append("image", fs.createReadStream(tempFilePath), {
-      filename: "screenshot.png",
-      contentType: "image/png",
-    });
-
-    // Retrieve token from the renderer.
-    const token = await mainWindow.webContents.executeJavaScript('localStorage.getItem("token")');
-
-    // Upload the screenshot.
-    const response = await axios.post(
-      `${BACKEND_URL}/screenshots/upload`,
-      formData,
-      {
-        headers: {
-          ...formData.getHeaders(),
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    console.log("Screenshot uploaded successfully:", response.data);
-
-    // Clean up the temporary file.
-    fs.unlinkSync(tempFilePath);
+    // Upload to server
+    await uploadScreenshot(tempFilePath);
+    
+    return { path: tempFilePath, timestamp: new Date().toISOString() };
   } catch (error) {
-    console.error("Error capturing or uploading screenshot:", error.response?.data || error);
+    console.error("Screenshot error:", error);
+    return null;
+  } finally {
+    // Clean up temp file after delay
+    if (tempFilePath) {
+      setTimeout(() => {
+        try { fs.unlinkSync(tempFilePath); } 
+        catch (e) { console.warn("Failed to delete temp file:", e); }
+      }, 30000);
+    }
   }
 }
 
-// Start background tasks for monitoring the active window, idle detection, and screenshot capture.
+function calculateDimensions(originalWidth, originalHeight) {
+  const maxWidth = 1280, maxHeight = 720;
+  const ratio = Math.min(maxWidth / originalWidth, maxHeight / originalHeight);
+  return {
+    width: Math.round(originalWidth * ratio),
+    height: Math.round(originalHeight * ratio)
+  };
+}
+
+function resizeImage(img, width, height) {
+  const outImg = PImage.make(width, height);
+  const ctx = outImg.getContext('2d');
+  ctx.drawImage(img, 0, 0, img.width, img.height, 0, 0, width, height);
+  return outImg;
+}
+
+async function saveTempImage(image) {
+  const tempPath = path.join(app.getPath('temp'), `screenshot_${Date.now()}.png`);
+  await PImage.encodePNGToStream(image, fs.createWriteStream(tempPath));
+  return tempPath;
+}
+
+async function uploadScreenshot(filePath) {
+  const formData = new FormData();
+  formData.append("image", fs.createReadStream(filePath), {
+    filename: "screenshot.png",
+    contentType: "image/png"
+  });
+
+  const token = await mainWindow.webContents.executeJavaScript(
+    'localStorage.getItem("token")'
+  );
+
+  await axios.post(`${BACKEND_URL}/screenshots/upload`, formData, {
+    headers: { 
+      ...formData.getHeaders(), 
+      Authorization: `Bearer ${token}`
+    }
+  });
+}
+
+// Background Tasks Management
 function startBackgroundTasks() {
-  console.log("Starting background tasks for monitoring foreground app, idle detection, and screenshot capture.");
-  // Check the active application every 1 second.
-  setInterval(updateForegroundApp, 1000);
-  // Check idle time every second.
-  setInterval(checkIdleTime, 1000);
-  // Capture and send screenshot every 10 minutes.
-  setInterval(captureAndSendScreenshot, 600000);
-  // Perform an initial update.
+  // Clear any existing intervals
+  stopBackgroundTasks();
+
+  console.log("Starting background monitoring tasks");
+  backgroundIntervals = [
+    setInterval(updateForegroundApp, 1000),
+    setInterval(checkIdleTime, 1000),
+    setInterval(captureAndSendScreenshot, 600000)
+  ];
+
+  // Initial updates
   updateForegroundApp();
-  // Immediately capture and send the first screenshot.
   captureAndSendScreenshot();
 }
 
-const createWindow = () => {
+function stopBackgroundTasks() {
+  backgroundIntervals.forEach(clearInterval);
+  backgroundIntervals = [];
+}
+
+// Window Management
+function createWindow() {
   mainWindow = new BrowserWindow({
     width: 800,
     height: 600,
@@ -184,67 +181,62 @@ const createWindow = () => {
     titleBarStyle: 'hidden',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      devTools: true,
+      devTools: !isProd
     },
   });
 
-  // Expose the BACKEND_URL to the renderer.
-  ipcMain.handle('get-backend-url', () => process.env.BACKEND_URL);
+  setupIPC();
+  mainWindow.loadURL(`file://${path.join(__dirname, 'dist', 'index.html')}`);
 
-  // Window control events.
-  ipcMain.on("window-minimize", () => {
-    if (mainWindow) mainWindow.minimize();
-  });
-  
-  ipcMain.on("window-maximize", () => {
-    if (mainWindow) {
-      if (mainWindow.isMaximized()) {
-        mainWindow.unmaximize();
-      } else {
-        mainWindow.maximize();
-      }
-    }
-  });
-  
-  ipcMain.on("window-close", () => {
-    if (mainWindow) mainWindow.close();
-  });
+  // Development tools
+  if (!isProd) {
+    mainWindow.webContents.openDevTools();
+  }
+}
 
-  // Listen for user activity events (mouse or keyboard) from the renderer.
+function setupIPC() {
+  // Window controls
+  ipcMain.on("window-minimize", () => mainWindow?.minimize());
+  ipcMain.on("window-maximize", () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow?.maximize());
+  ipcMain.on("window-close", () => mainWindow?.close());
+
+  // Screenshot handling
+  ipcMain.handle('capture-screenshot', captureAndSendScreenshot);
+  ipcMain.on('request-screenshot', captureAndSendScreenshot);
+  ipcMain.on('signalr-screenshot-request', () => sessionActive && captureAndSendScreenshot());
+
+  // Session management
   ipcMain.on("user-activity", () => {
-    console.log("Received user-activity event from renderer.");
-    if (!sessionActive) return;
-    if (isIdle) {
+    if (sessionActive && isIdle) {
       isIdle = false;
+      updateForegroundApp();
     }
-    updateForegroundApp();
   });
 
-  // Listen for session start command from the renderer.
   ipcMain.on("session-start", () => {
-    console.log("Received session-start event from renderer.");
-    if (mainWindow) {
-      mainWindow.minimize();
-    }
+    mainWindow?.minimize();
     sessionActive = true;
     startBackgroundTasks();
   });
 
   ipcMain.on("session-end", () => {
-    console.log("Session gracefully ended");  
     sessionActive = false;
+    stopBackgroundTasks();
   });
 
-  mainWindow.loadURL(`file://${path.join(__dirname, 'dist', 'index.html')}`);
-};
+  // Utility
+  ipcMain.handle('get-backend-url', () => BACKEND_URL);
+}
 
+// App Lifecycle
 app.setLoginItemSettings({
   openAtLogin: true,
-  openAsHidden: false, 
+  openAsHidden: false
 });
 
 app.whenReady().then(() => {
   createWindow();
+  
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();

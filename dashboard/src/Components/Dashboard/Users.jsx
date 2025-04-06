@@ -10,7 +10,7 @@ import { StatsCard, SessionStats } from "./StatsCard";
 ChartJS.register(ArcElement, Tooltip, Legend);
 
 const Users = () => {
-  const { onlineUserIds, screenHubConnection } = useOnlineUsers();
+  const { onlineUserIds,requestScreenshots } = useOnlineUsers();
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({});
@@ -59,27 +59,15 @@ const Users = () => {
 
   const handleTakeAllScreenshots = async () => {
     if (!onlineUserIds.length || isTakingScreenshots) return;
-
+  
     try {
       setIsTakingScreenshots(true);
+      requestScreenshots()
+      console.log("Screenshots requested from all online users.");
       
-      if (screenHubConnection) {
-        await Promise.allSettled(
-          onlineUserIds.map(userId => 
-            screenHubConnection.invoke("ShareScreenFrame", "SCREENSHOT_REQUEST", userId)
-          )
-        );
-      }
-
-      setTimeout(async () => {
-        const screenshotsData = await request.post("/screenshots/recent-screenshots", {
-          employeeIds: onlineUserIds
-        });
-        setScreenshots(screenshotsData);
-        setIsTakingScreenshots(false);
-      }, 10000);
     } catch (error) {
-      console.error("Screenshot request failed:", error);
+      console.error('Error requesting screenshots:', error);
+    } finally {
       setIsTakingScreenshots(false);
     }
   };
