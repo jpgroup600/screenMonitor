@@ -73,22 +73,50 @@ const Dashboard = () => {
       alert("Please select a project to start the session.");
       return;
     }
+  
     try {
-      const response = await request.post('/session/start', { 
-        projectId: String(selectedProjectId) 
+      // Start the session
+      const response = await request.post("/session/start", {
+        projectId: String(selectedProjectId),
       });
       console.log("Session start response:", response);
-
+  
+      // Fetch screenshot interval
+      const intervalRes = await request.get(
+        `/project/${selectedProjectId}/employee/${userId}/screenshot-interval`
+      );
+      const interval = intervalRes?.screenshotInterval;
+  
+      if (interval) {
+        // Convert interval string (HH:MM:SS) to milliseconds
+        const intervalToMilliseconds = (interval) => {
+          const [hours, minutes, seconds] = interval.split(":").map(Number);
+          return ((hours * 3600) + (minutes * 60) + seconds) * 1000;
+        };
+  
+        const intervalMs = intervalToMilliseconds(interval);
+        console.log("Screenshot Interval in ms:", intervalMs);
+  
+        // Send interval to Electron
+        if (window.electronAPI?.setScreenshotInterval) {
+          window.electronAPI.setScreenshotInterval(intervalMs);
+        }
+      }
+  
+      // Tell Electron that session has started (no params)
       if (window.electronAPI?.sessionStart) {
         window.electronAPI.sessionStart();
       }
-
+  
+      // Navigate to the session started screen
       navigate(`/sessionStarted?projectId=${selectedProjectId}`);
     } catch (error) {
       console.error("Failed to start session:", error);
       alert("Failed to start session. Please try again.");
     }
   };
+  
+  
 
   const handleLogout = () => {
     localStorage.removeItem("userId");

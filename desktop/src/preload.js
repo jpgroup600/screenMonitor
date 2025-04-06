@@ -14,4 +14,5 @@ contextBridge.exposeInMainWorld("electronAPI", {
   sessionEnd: () => ipcRenderer.send('session-end'),
   userActivity: () => ipcRenderer.send("user-activity"),
   captureScreenshot: () => ipcRenderer.invoke('capture-screenshot'),
+  setScreenshotInterval: (interval) => ipcRenderer.send("set-screenshot-interval", interval),
 });

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, powerMonitor } = require('electron');
+const { app, BrowserWindow, ipcMain, powerMonitor, Tray, Menu, nativeImage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const FormData = require('form-data');
@@ -18,13 +18,20 @@ if (started) app.quit();
 
 // Global Variables
 let mainWindow;
+let tray = null;
 const BACKEND_URL = process.env.BACKEND_URL;
 let sessionActive = false;
 let currentForegroundApp = null;
 let isIdle = false;
 let backgroundIntervals = [];
+global.sharedScreenshotInterval = 600000; // Default 10 minutes
 
-// Session Management Functions
+// Platform detection
+const isMac = process.platform === 'darwin';
+const isWindows = process.platform === 'win32';
+const isLinux = process.platform === 'linux';
+
+// 1. SESSION MANAGEMENT
 async function sendSessionRequest(type, appName) {
   const endpoint = `${BACKEND_URL}/sessionForegroundApp/${type}`;
   const token = await mainWindow.webContents.executeJavaScript('localStorage.getItem("token")');
@@ -41,7 +48,7 @@ async function sendSessionRequest(type, appName) {
   }
 }
 
-// Activity Monitoring
+// 2. ACTIVITY MONITORING
 async function updateForegroundApp() {
   if (!sessionActive) return;
 
@@ -74,24 +81,19 @@ function checkIdleTime() {
   }
 }
 
-// Screenshot Functions
+// 3. SCREENSHOT FUNCTIONALITY
 async function captureAndSendScreenshot() {
   if (!sessionActive) return null;
 
   let tempFilePath;
   try {
-    // Capture and process screenshot
     const imgBuffer = await screenshot({ format: "png" });
     const img = await PImage.decodePNGFromStream(Readable.from(imgBuffer));
     
-    // Calculate dimensions with aspect ratio
     const { width, height } = calculateDimensions(img.width, img.height);
     const resizedImg = resizeImage(img, width, height);
     
-    // Save to temp file
     tempFilePath = await saveTempImage(resizedImg);
-    
-    // Upload to server
     await uploadScreenshot(tempFilePath);
     
     return { path: tempFilePath, timestamp: new Date().toISOString() };
@@ -99,7 +101,6 @@ async function captureAndSendScreenshot() {
     console.error("Screenshot error:", error);
     return null;
   } finally {
-    // Clean up temp file after delay
     if (tempFilePath) {
       setTimeout(() => {
         try { fs.unlinkSync(tempFilePath); } 
@@ -150,19 +151,17 @@ async function uploadScreenshot(filePath) {
   });
 }
 
-// Background Tasks Management
+// 4. BACKGROUND TASKS
 function startBackgroundTasks() {
-  // Clear any existing intervals
   stopBackgroundTasks();
-
   console.log("Starting background monitoring tasks");
+  
   backgroundIntervals = [
     setInterval(updateForegroundApp, 1000),
-    setInterval(checkIdleTime, 1000),
-    setInterval(captureAndSendScreenshot, 600000)
+    setInterval(checkIdleTime, 5000),
+    setInterval(captureAndSendScreenshot, global.sharedScreenshotInterval)
   ];
 
-  // Initial updates
   updateForegroundApp();
   captureAndSendScreenshot();
 }
@@ -172,7 +171,7 @@ function stopBackgroundTasks() {
   backgroundIntervals = [];
 }
 
-// Window Management
+// 5. WINDOW MANAGEMENT
 function createWindow() {
   mainWindow = new BrowserWindow({
     width: 800,
@@ -181,29 +180,90 @@ function createWindow() {
     titleBarStyle: 'hidden',
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      devTools: !isProd
+      devTools: false
     },
+  });
+
+  mainWindow.on('close', (event) => {
+    if (sessionActive) {
+      event.preventDefault();
+      mainWindow.hide();
+    }
   });
 
   setupIPC();
   mainWindow.loadURL(`file://${path.join(__dirname, 'dist', 'index.html')}`);
 
-  // Development tools
   if (!isProd) {
     mainWindow.webContents.openDevTools();
   }
+
+  // Create tray icon immediately (but it will be hidden until session starts)
+  createTray();
+  if (!sessionActive) {
+    tray?.destroy();
+    tray = null;
+  }
 }
 
+// 6. TRAY MANAGEMENT
+function createTray() {
+  if (tray) return;
+
+  const iconName = isMac ? 'tray-icon-mac.png' : isWindows ? 'tray-icon-win.png' : 'tray-icon-linux.png';
+  const iconPath = path.join(__dirname, 'assets', iconName);
+  
+  try {
+    const image = nativeImage.createFromPath(iconPath);
+    tray = new Tray(image.isEmpty() ? path.join(__dirname, 'assets', 'icon.png') : image);
+  } catch (e) {
+    tray = new Tray(path.join(__dirname, 'assets', 'icon.png'));
+  }
+
+  const contextMenu = Menu.buildFromTemplate([
+    { label: 'Restore', click: () => mainWindow.show() },
+    { 
+      label: 'End Session & Quit', 
+      click: () => {
+        sessionActive = false;
+        stopBackgroundTasks();
+        tray?.destroy();
+        tray = null;
+        app.quit();
+      }
+    }
+  ]);
+
+  tray.setToolTip('ETracker');
+  tray.setContextMenu(contextMenu);
+  tray.on('double-click', () => mainWindow.show());
+}
+
+// 7. IPC COMMUNICATION
 function setupIPC() {
   // Window controls
-  ipcMain.on("window-minimize", () => mainWindow?.minimize());
-  ipcMain.on("window-maximize", () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow?.maximize());
-  ipcMain.on("window-close", () => mainWindow?.close());
+  ipcMain.on("window-minimize", () => {
+    if (sessionActive) {
+      mainWindow.hide();
+    } else {
+      mainWindow.minimize();
+    }
+  });
+
+  ipcMain.on("window-maximize", () => {
+    mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow?.maximize();
+  });
+
+  ipcMain.on("window-close", () => {
+    mainWindow?.close();
+  });
 
   // Screenshot handling
   ipcMain.handle('capture-screenshot', captureAndSendScreenshot);
-  ipcMain.on('request-screenshot', captureAndSendScreenshot);
-  ipcMain.on('signalr-screenshot-request', () => sessionActive && captureAndSendScreenshot());
+  ipcMain.on('set-screenshot-interval', (event, interval) => {
+    global.sharedScreenshotInterval = interval;
+    if (sessionActive) startBackgroundTasks();
+  });
 
   // Session management
   ipcMain.on("user-activity", () => {
@@ -214,24 +274,34 @@ function setupIPC() {
   });
 
   ipcMain.on("session-start", () => {
-    mainWindow?.minimize();
     sessionActive = true;
+    createTray();
     startBackgroundTasks();
+    
+    if (isMac) {
+      app.dock.hide();
+    }
   });
 
   ipcMain.on("session-end", () => {
     sessionActive = false;
     stopBackgroundTasks();
+    
+    if (isMac) {
+      app.dock.show();
+    }
+    
+    tray?.destroy();
+    tray = null;
   });
 
-  // Utility
   ipcMain.handle('get-backend-url', () => BACKEND_URL);
 }
 
-// App Lifecycle
+// 8. APP LIFECYCLE
 app.setLoginItemSettings({
   openAtLogin: true,
-  openAsHidden: false
+  path: app.getPath('exe')
 });
 
 app.whenReady().then(() => {
@@ -240,12 +310,14 @@ app.whenReady().then(() => {
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow();
+    } else if (isMac && !mainWindow.isVisible()) {
+      mainWindow.show();
     }
   });
 });
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  if (!isMac || !tray) {
     app.quit();
   }
 });
