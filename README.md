@@ -116,6 +116,7 @@ BACKEND_URL="http://localhost:5265/api"
 
 #### ▶️ Run the Electron app:
 ```bash
+npm run build
 npm start
 ```
 
