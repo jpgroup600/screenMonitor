@@ -1,5 +1,9 @@
 mod api;
+mod backup_inventory;
+mod backup_policy;
+mod backup_staging;
 mod core;
+mod data_protection;
 mod monitor;
 mod offline_queue;
 mod platform;
@@ -26,15 +30,21 @@ struct AppState {
     reminder: Mutex<Option<ReminderSession>>,
     token: Mutex<Option<String>>,
     queue: Arc<OfflineQueue>,
+    backup_staging_directory: PathBuf,
 }
 
 impl AppState {
     fn new(queue_directory: PathBuf) -> Result<Self, String> {
+        let backup_staging_directory = queue_directory
+            .parent()
+            .ok_or("Invalid application data directory")?
+            .join("backup-staging");
         Ok(Self {
             session: Mutex::new(None),
             reminder: Mutex::new(None),
             token: Mutex::new(None),
             queue: Arc::new(OfflineQueue::new(queue_directory)?),
+            backup_staging_directory,
         })
     }
 }
@@ -96,6 +106,37 @@ fn stop_monitoring(state: State<'_, AppState>) -> Result<(), String> {
 #[tauri::command]
 fn list_removable_drives() -> Vec<String> {
     platform::removable_drives()
+}
+
+#[tauri::command]
+async fn preview_backup_inventory(
+    root: String,
+) -> Result<backup_inventory::InventoryResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        backup_inventory::scan(
+            std::path::Path::new(&root),
+            &backup_policy::BackupPolicy::default(),
+        )
+    })
+    .await
+    .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+async fn stage_backup_file(source: String, state: State<'_, AppState>) -> Result<String, String> {
+    let source = PathBuf::from(source);
+    let metadata = std::fs::metadata(&source).map_err(|error| error.to_string())?;
+    let policy = backup_policy::BackupPolicy::default();
+    if let Some(reason) = policy.exclusion_reason(&source, Some(metadata.len())) {
+        return Err(format!("File excluded by backup policy: {reason:?}"));
+    }
+    let staging_directory = state.backup_staging_directory.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        backup_staging::stage_file(&source, &staging_directory)
+            .map(|path| path.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -179,6 +220,8 @@ pub fn run() {
             start_attendance_monitoring,
             stop_monitoring,
             list_removable_drives,
+            preview_backup_inventory,
+            stage_backup_file,
             capture_screenshot,
             start_attendance_reminders,
             stop_attendance_reminders
