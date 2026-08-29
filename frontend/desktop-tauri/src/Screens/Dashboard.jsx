@@ -98,10 +98,6 @@ const Dashboard = () => {
           </button>
         </div>
 
-        <p className="text-lg text-gray-400 mb-8">
-          출근하면 화면 캡처, 활성 프로그램, 유휴 시간이 자동으로 기록되고 퇴근하면 종료됩니다.
-        </p>
-
         <section className="rounded-2xl border border-gray-700 bg-gray-800 p-8 shadow-xl">
           <div className="flex flex-col gap-8 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -110,12 +106,10 @@ const Dashboard = () => {
               </div>
               {attendance ? (
                 <>
-                  <p className="text-sm text-green-400">근무 중 · 모니터링 활성</p>
+                  <p className="text-sm text-green-400">근무 중</p>
                   <p className="mt-1 font-mono text-5xl font-bold tracking-tight">{elapsed(attendance.clockInAt)}</p>
                   <p className="mt-2 text-sm text-gray-400">
                     출근 {new Date(attendance.clockInAt).toLocaleTimeString()}
-                    <span className="mx-2">·</span>
-                    누적 유휴 {attendance.totalIdleDuration || "00:00:00"}
                   </p>
                 </>
               ) : (
@@ -141,7 +135,6 @@ const Dashboard = () => {
         <section className="mt-10">
           <div className="mb-4">
             <h2 className="text-2xl font-bold">내 배정 프로젝트</h2>
-            <p className="mt-1 text-sm text-gray-400">배정 현황을 확인하는 용도이며 출퇴근 기록과 모니터링에는 영향을 주지 않습니다.</p>
           </div>
           {projectsLoading ? (
             <p className="text-gray-400">프로젝트를 불러오는 중입니다...</p>
