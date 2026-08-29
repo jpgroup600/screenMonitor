@@ -84,6 +84,12 @@ namespace ScreenshotMonitor.Data.Context
                 .WithMany(a => a.IdlePeriods)
                 .HasForeignKey(i => i.AttendanceRecordId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Device>()
+                .HasOne(d => d.Employee)
+                .WithMany()
+                .HasForeignKey(d => d.EmployeeId)
+                .OnDelete(DeleteBehavior.Cascade);
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -118,5 +124,6 @@ namespace ScreenshotMonitor.Data.Context
         public DbSet<SessionForegroundApp> SessionForegroundApps { get; set; }
         public DbSet<AttendanceRecord> AttendanceRecords { get; set; }
         public DbSet<AttendanceIdlePeriod> AttendanceIdlePeriods { get; set; }
+        public DbSet<Device> Devices { get; set; }
     }
 }

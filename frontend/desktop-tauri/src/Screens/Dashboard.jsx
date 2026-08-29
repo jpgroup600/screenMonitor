@@ -5,6 +5,7 @@ import request from "../Actions/request";
 import { native } from "../native";
 import ProjectCard from "../Components/ProjectCard";
 import { restoreAttendanceMonitoring } from "../attendanceRecovery";
+import { sendDeviceHeartbeat } from "../deviceHeartbeat";
 
 const Dashboard = () => {
   const [attendance, setAttendance] = useState(null);
@@ -14,6 +15,16 @@ const Dashboard = () => {
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const heartbeat = () => sendDeviceHeartbeat({ request, storage: localStorage }).catch((error) => {
+      console.error("Device heartbeat failed:", error);
+      if (error?.response?.status === 403) native.stopMonitoring().catch(console.error);
+    });
+    heartbeat();
+    const timer = window.setInterval(heartbeat, 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
