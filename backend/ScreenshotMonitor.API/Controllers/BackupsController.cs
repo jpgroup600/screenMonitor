@@ -28,4 +28,22 @@ public class BackupsController(BackupService service) : ControllerBase
         }
         catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
     }
+
+    [Authorize(Roles = "Admin"), HttpGet]
+    public async Task<ActionResult<IEnumerable<BackupFileListDto>>> List([FromQuery] string? search = null, [FromQuery] int take = 200) =>
+        Ok((await service.ListAsync(search, take)).Select(file => {
+            var latest = file.Versions.OrderByDescending(version => version.UploadedAt).First();
+            return new BackupFileListDto(file.Id, file.EmployeeId, file.Employee.FullName, file.DeviceId, file.OriginalPath,
+                file.Versions.Count, latest.PlainSizeBytes, latest.UploadedAt);
+        }));
+
+    [Authorize(Roles = "Admin"), HttpGet("{id}")]
+    public async Task<ActionResult<BackupFileDetailDto>> Detail(string id)
+    {
+        var file = await service.GetAsync(id);
+        if (file is null) return NotFound();
+        return Ok(new BackupFileDetailDto(file.Id, file.EmployeeId, file.Employee.FullName, file.DeviceId,
+            file.OriginalPath, file.Versions.Select(version => new BackupVersionDto(version.Id, version.ContentHash,
+                version.PlainSizeBytes, version.SourceModifiedAt, version.UploadedAt)).ToList()));
+    }
 }

@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -11,6 +13,20 @@ namespace ScreenshotMonitor.Data.Services;
 
 public partial class BackupService(SmDbContext db, IBackupObjectStorage storage, TimeProvider timeProvider)
 {
+    public Task<List<BackupFile>> ListAsync(string? search = null, int take = 200)
+    {
+        var query = db.BackupFiles.AsNoTracking().Include(x => x.Employee).Include(x => x.Versions).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(search)) {
+            var keyword = search.Trim().ToLower();
+            query = query.Where(x => x.OriginalPath.ToLower().Contains(keyword)
+                || x.DeviceId.ToLower().Contains(keyword) || x.Employee.FullName.ToLower().Contains(keyword));
+        }
+        return query.OrderByDescending(x => x.Versions.Max(v => v.UploadedAt)).Take(Math.Clamp(take, 1, 500)).ToListAsync();
+    }
+
+    public Task<BackupFile?> GetAsync(string id) => db.BackupFiles.AsNoTracking().Include(x => x.Employee)
+        .Include(x => x.Versions.OrderByDescending(v => v.UploadedAt)).FirstOrDefaultAsync(x => x.Id == id);
+
     public async Task<(FileVersion Version, bool Deduplicated)> UploadAsync(
         string employeeId, string deviceId, string originalPath, string contentHash,
         long plainSizeBytes, DateTime sourceModifiedAt, Stream encryptedContent,
