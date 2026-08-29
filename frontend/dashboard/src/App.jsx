@@ -13,6 +13,7 @@ import SessionDetails from './Screens/Sessions/SessionDetails';
 import EmployeeProfile from './Screens/User/EmployeeProfile';
 import Attendance from './Screens/Attendance';
 import Devices from './Screens/Devices';
+import SecurityEvents from './Screens/SecurityEvents';
 
 function App() {
   const token = localStorage.getItem("token");
@@ -42,6 +43,7 @@ function App() {
             <Route path="/users" element={<Users />} />
             <Route path="/attendance" element={<Attendance />} />
             <Route path="/devices" element={<Devices />} />
+            <Route path="/security-events" element={<SecurityEvents />} />
             <Route path="/sessions/:employeeId/:projectId" element={<Sessions />} />
             <Route 
               path="/employees/:employeeId/projects/:projectId/sessions/:sessionId" 
