@@ -9,8 +9,14 @@ export const OnlineUsersProvider = ({ children }) => {
 
   // User Activity Hub Connection
   useEffect(() => {
+    const hubUrl = import.meta.env.VITE_HUB_URL;
+    if (!hubUrl) {
+      console.error("SignalR URL is not defined. Please set VITE_HUB_URL.");
+      return;
+    }
+
     const connection = new signalR.HubConnectionBuilder()
-      .withUrl("http://141.164.41.199:8080/api/useractivityhub", {
+      .withUrl(hubUrl, {
         accessTokenFactory: () => localStorage.getItem("token"),
       })
       .withAutomaticReconnect()

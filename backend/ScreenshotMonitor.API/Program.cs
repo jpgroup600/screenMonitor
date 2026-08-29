@@ -10,6 +10,8 @@ using Microsoft.OpenApi.Models;
 using System.Text.Json.Serialization;
 using ScreenshotMonitor.Data.Interfaces;
 using ScreenshotMonitor.SignalR;
+using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -114,11 +116,19 @@ builder.Services.AddSignalR()
 
 var app = builder.Build();
 
-app.UseAuthentication();  // Add Authentication middleware
-
-var storagePath = builder.Configuration["FileStorage:UploadPath"] ?? "/var/www/Uploads/";
+var storagePath = builder.Configuration["FileStorage:UploadPath"] ?? "/app/Uploads";
 Directory.CreateDirectory(storagePath); // Ensure the folder exists
 
+app.UseForwardedHeaders(new ForwardedHeadersOptions
+{
+    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
+});
+
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(storagePath),
+    RequestPath = "/Uploads"
+});
 
 app.UseCors(x => x
     .AllowAnyMethod()
@@ -144,8 +154,11 @@ using (var scope = app.Services.CreateScope())
         // Ensure database is created if it doesn�t exist
         //dbContext.Database.EnsureCreated();
 
-        // Apply any pending migrations
-        //dbContext.Database.Migrate();
+        if (builder.Configuration.GetValue<bool>("ApplyMigrations"))
+        {
+            Console.WriteLine("Applying pending database migrations...");
+            dbContext.Database.Migrate();
+        }
     }
     catch (Exception ex)
     {
@@ -165,4 +178,5 @@ app.UseHttpsRedirection();
 app.MapHub<UserActivityHub>("/useractivityhub");
 app.MapHub<ScreenHub>("/screenHub");
 app.MapControllers();
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.Run();

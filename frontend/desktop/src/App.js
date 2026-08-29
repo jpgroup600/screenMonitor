@@ -12,14 +12,18 @@ const App = () => {
   const [screenHubConnection, setScreenHubConnection] = useState(null); // screenhub connection
   const [loading, setLoading] = useState(true);
 
-  const baseURL = window.backend ? window.backend.getBackendUrl() : process.env.BACKEND_URL;
+  const hubURL = process.env.HUB_URL;
 
   useEffect(() => {
     const connectUserActivityHub = async () => {
       if (token && !connection) {
         try {
+          if (!hubURL) {
+            throw new Error('HUB_URL is not configured');
+          }
+
           const newConnection = new signalR.HubConnectionBuilder()
-            .withUrl(`http://141.164.41.199:8080/api/useractivityhub`, {
+            .withUrl(hubURL, {
               accessTokenFactory: () => token,
             })
             .withAutomaticReconnect()
@@ -65,7 +69,7 @@ const App = () => {
         console.log('ScreenHub disconnected');
       }
     };
-  }, [token]);
+  }, [token, hubURL]);
 
   if (loading) {
     return (

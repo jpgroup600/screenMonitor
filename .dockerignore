@@ -1,0 +1,9 @@
+**/.git
+**/bin
+**/obj
+**/node_modules
+**/dist
+**/out
+**/.env
+**/appsettings.Development.json
+frontend/desktop/src/dist

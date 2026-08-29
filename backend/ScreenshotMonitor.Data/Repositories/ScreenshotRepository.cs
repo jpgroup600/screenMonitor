@@ -34,7 +34,7 @@ public class ScreenshotRepository(
     */
     // Set different paths for Windows and Linux
     
-    private readonly string _storagePath = configuration["FileStorage:UploadPath"] ?? "/var/www/Uploads/";
+    private readonly string _storagePath = configuration["FileStorage:UploadPath"] ?? "/app/Uploads";
     //private readonly string _storagePath =configuration["FileStorage:WindowsUploadPath"] ?? @"C:\Users\ahsan\Desktop\ScreenshotMonitor LocalStorage\screenshots";
     
     public async Task<List<EmployeeScreenshotDto>> GetRecentScreenshotsAsync(List<string> employeeIds)
