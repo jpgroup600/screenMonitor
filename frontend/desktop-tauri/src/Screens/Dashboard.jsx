@@ -7,6 +7,7 @@ import ProjectCard from "../Components/ProjectCard";
 import { restoreAttendanceMonitoring } from "../attendanceRecovery";
 import { restoreAuthorizedMonitoring, sendDeviceHeartbeat } from "../deviceHeartbeat";
 import { diffRemovableDrives, recordUsbChanges } from "../usbAudit";
+import { diffUsbFiles, recordUsbFileCopies } from "../usbFileAudit";
 import { BACKUP_INITIAL_DELAY_MS, BACKUP_INTERVAL_MS, runBackupCycle } from "../backupScheduler";
 
 const Dashboard = () => {
@@ -17,6 +18,27 @@ const Dashboard = () => {
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const snapshots = new Map();
+    const scanUsbFiles = async () => {
+      try {
+        const drives = await native.listRemovableDrives();
+        for (const drive of drives) {
+          const current = (await native.previewBackupInventory(drive)).files || [];
+          const changed = diffUsbFiles(snapshots.get(drive), current);
+          snapshots.set(drive, current);
+          await recordUsbFileCopies({ request, deviceId: localStorage.getItem("screenMonitorDeviceId"), drive, files: changed });
+        }
+        for (const drive of snapshots.keys()) if (!drives.includes(drive)) snapshots.delete(drive);
+      } catch (error) {
+        console.error("USB file audit failed:", error);
+      }
+    };
+    scanUsbFiles();
+    const timer = window.setInterval(scanUsbFiles, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const backup = () => runBackupCycle({ native, storage: localStorage }).catch((error) => console.error("Incremental backup failed:", error));
