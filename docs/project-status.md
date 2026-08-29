@@ -133,3 +133,5 @@
 - 로그아웃할 때 모니터링 세션과 활성 앱 기록을 종료하고 네이티브 추적 중지
 - 신규 API: `POST /api/session/monitoring/ensure`, `POST /api/session/monitoring/end`
 - .NET 테스트 10개, JavaScript 테스트 2개, Rust 테스트 7개 통과
+- Railway 배포 `1ba3bbbb-a875-49a8-8995-587374d3afea` 성공
+- 새 릴리스 앱 실사용 검증: `session/monitoring/ensure` HTTP 200, 즉시 듀얼 모니터 업로드 2건 모두 HTTP 200
