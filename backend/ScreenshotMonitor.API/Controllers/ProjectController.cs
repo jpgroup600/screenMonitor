@@ -41,11 +41,7 @@ public class ProjectController(
     public async Task<IActionResult> GetScreenshotInterval(string projectId, string employeeId)
     {
         var interval = await projectRepo.GetScreenshotIntervalAsync(projectId, employeeId);
-        if (interval != null)
-        {
-            return Ok(new { ScreenshotInterval = interval });
-        }
-        return NotFound(new { Message = "Screenshot interval not found" });
+        return Ok(new { ScreenshotInterval = interval ?? TimeSpan.FromMinutes(10) });
     }
     
     [Authorize(Roles = "Admin")]

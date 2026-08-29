@@ -94,12 +94,17 @@ const Dashboard = () => {
     if (!attendance) return alert("먼저 출근 시작 버튼을 눌러 주세요.");
     try {
       await request.post("/session/start", { projectId: String(selectedProjectId) });
-      const config = await request.get(`/project/${selectedProjectId}/employee/${userId}/screenshot-interval`);
+      const config = await request
+        .get(`/project/${selectedProjectId}/employee/${userId}/screenshot-interval`)
+        .catch((err) => {
+          console.warn("Using default screenshot interval:", err);
+          return null;
+        });
       await native.startMonitoring(localStorage.getItem("token"), intervalMs(config?.screenshotInterval));
       navigate(`/sessionStarted?projectId=${selectedProjectId}`);
     } catch (err) {
       console.error(err);
-      alert("프로젝트 기록 전환에 실패했습니다.");
+      alert("프로젝트 시간 분류를 시작하지 못했습니다.");
     }
   };
 
@@ -143,7 +148,7 @@ const Dashboard = () => {
           {projects.map((project) => <ProjectCard key={project.id} project={project} isSelected={selectedProjectId === project.id} onSelect={() => setSelectedProjectId(project.id)} />)}
         </div>}
         {!loading && !error && <div className="fixed bottom-8 right-8">
-          <button onClick={switchProject} disabled={!selectedProjectId || !attendance} className={`flex items-center px-8 py-3 rounded-lg text-lg font-semibold ${selectedProjectId && attendance ? "bg-blue-600 hover:bg-blue-700 shadow-lg" : "bg-gray-600 cursor-not-allowed"}`}><FaPlay className="mr-3" />선택 프로젝트로 기록 전환</button>
+          <button onClick={switchProject} disabled={!selectedProjectId || !attendance} className={`flex items-center px-8 py-3 rounded-lg text-lg font-semibold ${selectedProjectId && attendance ? "bg-blue-600 hover:bg-blue-700 shadow-lg" : "bg-gray-600 cursor-not-allowed"}`}><FaPlay className="mr-3" />이 프로젝트로 시간 분류</button>
         </div>}
       </div>
     </div>
