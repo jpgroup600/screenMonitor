@@ -4,9 +4,11 @@ import { useNavigate } from "react-router-dom";
 import request from "../Actions/request";
 import { native } from "../native";
 import ProjectCard from "../Components/ProjectCard";
+import { startAttendanceReminder } from "../attendanceReminder";
 
 const Dashboard = () => {
   const [attendance, setAttendance] = useState(null);
+  const [attendanceLoaded, setAttendanceLoaded] = useState(false);
   const [projects, setProjects] = useState([]);
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -38,10 +40,17 @@ const Dashboard = () => {
         }
       } catch (err) {
         console.error("Failed to load attendance:", err);
+      } finally {
+        setAttendanceLoaded(true);
       }
     };
     loadAttendance();
   }, []);
+
+  useEffect(() => {
+    if (!attendanceLoaded || attendance) return undefined;
+    return startAttendanceReminder(() => native.showAttendanceReminder());
+  }, [attendanceLoaded, attendance]);
 
   const clockIn = async () => {
     try {

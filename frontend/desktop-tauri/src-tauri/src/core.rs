@@ -43,6 +43,10 @@ pub fn scaled_dimensions(width: u32, height: u32, max_width: u32, max_height: u3
     )
 }
 
+pub fn screenshot_file_name(process_id: u32, monitor_index: usize) -> String {
+    format!("screen-monitor-{process_id}-{monitor_index}.png")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -79,5 +83,12 @@ mod tests {
         assert_eq!(scaled_dimensions(1920, 1080, 1280, 720), (1280, 720));
         assert_eq!(scaled_dimensions(800, 600, 1280, 720), (800, 600));
         assert_eq!(scaled_dimensions(0, 0, 1280, 720), (0, 0));
+    }
+
+    #[test]
+    fn screenshot_names_are_unique_for_each_monitor() {
+        assert_eq!(screenshot_file_name(42, 0), "screen-monitor-42-0.png");
+        assert_eq!(screenshot_file_name(42, 1), "screen-monitor-42-1.png");
+        assert_ne!(screenshot_file_name(42, 0), screenshot_file_name(42, 1));
     }
 }

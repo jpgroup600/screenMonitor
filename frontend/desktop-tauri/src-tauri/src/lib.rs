@@ -6,6 +6,7 @@ mod platform;
 use monitor::MonitorSession;
 use std::{sync::Mutex, time::Duration};
 use tauri::{Manager, State};
+use tauri_plugin_notification::NotificationExt;
 
 const BACKEND_URL: &str = "https://api-production-18d6.up.railway.app/api";
 
@@ -68,15 +69,27 @@ async fn capture_screenshot(state: State<'_, AppState>) -> Result<(), String> {
     monitor::capture_and_upload(&api::ApiClient::new(BACKEND_URL.into(), token)).await
 }
 
+#[tauri::command]
+fn show_attendance_reminder(app: tauri::AppHandle) -> Result<(), String> {
+    app.notification()
+        .builder()
+        .title("출퇴근 관리 프로그램")
+        .body("출근 기록이 없습니다. 출근 버튼을 눌러주세요.")
+        .show()
+        .map_err(|error| error.to_string())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(tauri_plugin_notification::init())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             start_monitoring,
             start_attendance_monitoring,
             stop_monitoring,
-            capture_screenshot
+            capture_screenshot,
+            show_attendance_reminder
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

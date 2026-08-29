@@ -1,6 +1,6 @@
 use crate::{
     api::ApiClient,
-    core::{scaled_dimensions, ActivityTracker},
+    core::{scaled_dimensions, screenshot_file_name, ActivityTracker},
     platform,
 };
 use screenshots::Screen;
@@ -68,17 +68,37 @@ pub fn spawn(
 }
 
 pub async fn capture_and_upload(api: &ApiClient) -> Result<(), String> {
-    let screen = Screen::all()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .next()
-        .ok_or("No monitor found")?;
+    let screens = Screen::all().map_err(|e| e.to_string())?;
+    if screens.is_empty() {
+        return Err("No monitor found".into());
+    }
+
+    let mut errors = Vec::new();
+    for (monitor_index, screen) in screens.into_iter().enumerate() {
+        let result = capture_monitor_and_upload(api, screen, monitor_index).await;
+        if let Err(error) = result {
+            errors.push(format!("monitor {monitor_index}: {error}"));
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors.join("; "))
+    }
+}
+
+async fn capture_monitor_and_upload(
+    api: &ApiClient,
+    screen: Screen,
+    monitor_index: usize,
+) -> Result<(), String> {
     let image = screen.capture().map_err(|e| e.to_string())?;
     let (width, height) = scaled_dimensions(image.width(), image.height(), 1280, 720);
     let resized =
         image::imageops::resize(&image, width, height, image::imageops::FilterType::Triangle);
     let path: PathBuf =
-        std::env::temp_dir().join(format!("screen-monitor-{}.png", std::process::id()));
+        std::env::temp_dir().join(screenshot_file_name(std::process::id(), monitor_index));
     resized.save(&path).map_err(|e| e.to_string())?;
     let result = api.upload(&path).await;
     let _ = tokio::fs::remove_file(path).await;
