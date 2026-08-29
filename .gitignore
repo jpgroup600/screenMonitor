@@ -1,4 +1,5 @@
 .dotnet-cli/
 .nuget-packages/
+.dotnet-tools/
 **/bin/
 **/obj/
