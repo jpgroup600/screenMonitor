@@ -2,6 +2,7 @@
 
 ## 2026-08-30 Railway Storage Bucket 연동
 
+- Railway API 배포 `2e0cbf7e-69b9-4fc0-a650-35008b8e8900` 성공, health HTTP 200 및 운영 DB 마이그레이션 적용 확인
 - production Asia Pacific 지역에 `employee-backups` 비공개 Bucket 생성
 - API 서비스에 Bucket 자격증명을 Railway 참조 변수로 연결해 비밀키를 코드·Git에 저장하지 않음
 - `BackupFiles`, `FileVersions` 테이블과 EF 마이그레이션 추가
