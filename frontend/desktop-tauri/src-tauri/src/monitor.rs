@@ -1,6 +1,7 @@
 use crate::{
     api::ApiClient,
     core::{scaled_dimensions, screenshot_file_name, ActivityTracker},
+    offline_queue::{OfflineQueue, QueuedRequest},
     platform,
 };
 use screenshots::Screen;
@@ -28,6 +29,7 @@ pub fn spawn(
     base_url: String,
     token: String,
     screenshot_interval: Option<Duration>,
+    queue: Arc<OfflineQueue>,
 ) -> MonitorSession {
     let running = Arc::new(AtomicBool::new(true));
     let task_running = running.clone();
@@ -40,6 +42,7 @@ pub fn spawn(
                 .unwrap_or(Duration::from_secs(24 * 60 * 60))
                 .max(Duration::from_secs(5)),
         );
+        let mut retry_tick = tokio::time::interval(Duration::from_secs(30));
         while task_running.load(Ordering::SeqCst) {
             tokio::select! {
                 _ = activity_tick.tick() => {
@@ -47,27 +50,38 @@ pub fn spawn(
                     let transition = tracker.lock().await.transition(app);
                     if let Some(name) = transition.ended {
                         if name == "idle" { let _ = api.attendance_idle_event("end").await; }
-                        let _ = api.app_event("end", &name).await;
+                        send_or_queue(&api, &queue, QueuedRequest::AppEvent { kind: "end".into(), app_name: name }).await;
                     }
                     if let Some(name) = transition.started {
                         if name == "idle" { let _ = api.attendance_idle_event("start").await; }
-                        let _ = api.app_event("start", &name).await;
+                        send_or_queue(&api, &queue, QueuedRequest::AppEvent { kind: "start".into(), app_name: name }).await;
                     }
                 }
                 _ = screenshot_tick.tick() => {
-                    if screenshot_interval.is_some() { let _ = capture_and_upload(&api).await; }
+                    if screenshot_interval.is_some() { let _ = capture_and_upload(&api, &queue).await; }
+                }
+                _ = retry_tick.tick() => {
+                    let _ = retry_pending(&api, &queue).await;
                 }
             }
         }
         let final_app = tracker.lock().await.finish();
         if let Some(name) = final_app {
-            let _ = api.app_event("end", &name).await;
+            send_or_queue(
+                &api,
+                &queue,
+                QueuedRequest::AppEvent {
+                    kind: "end".into(),
+                    app_name: name,
+                },
+            )
+            .await;
         }
     });
     MonitorSession { running }
 }
 
-pub async fn capture_and_upload(api: &ApiClient) -> Result<(), String> {
+pub async fn capture_and_upload(api: &ApiClient, queue: &OfflineQueue) -> Result<(), String> {
     let screens = Screen::all().map_err(|e| e.to_string())?;
     if screens.is_empty() {
         return Err("No monitor found".into());
@@ -75,7 +89,7 @@ pub async fn capture_and_upload(api: &ApiClient) -> Result<(), String> {
 
     let mut errors = Vec::new();
     for (monitor_index, screen) in screens.into_iter().enumerate() {
-        let result = capture_monitor_and_upload(api, screen, monitor_index).await;
+        let result = capture_monitor_and_upload(api, queue, screen, monitor_index).await;
         if let Err(error) = result {
             errors.push(format!("monitor {monitor_index}: {error}"));
         }
@@ -90,6 +104,7 @@ pub async fn capture_and_upload(api: &ApiClient) -> Result<(), String> {
 
 async fn capture_monitor_and_upload(
     api: &ApiClient,
+    queue: &OfflineQueue,
     screen: Screen,
     monitor_index: usize,
 ) -> Result<(), String> {
@@ -101,6 +116,95 @@ async fn capture_monitor_and_upload(
         std::env::temp_dir().join(screenshot_file_name(std::process::id(), monitor_index));
     resized.save(&path).map_err(|e| e.to_string())?;
     let result = api.upload(&path).await;
+    if result.is_err() {
+        if let Ok(bytes) = tokio::fs::read(&path).await {
+            let _ = queue.enqueue(&QueuedRequest::Screenshot { bytes });
+        }
+    }
     let _ = tokio::fs::remove_file(path).await;
     result
+}
+
+async fn dispatch(api: &ApiClient, request: &QueuedRequest) -> Result<(), String> {
+    match request {
+        QueuedRequest::AppEvent { kind, app_name } => api.app_event(kind, app_name).await,
+        QueuedRequest::AttendanceIdle { event } => api.attendance_idle_event(event).await,
+        QueuedRequest::Screenshot { bytes } => api.upload_bytes(bytes.clone()).await,
+    }
+}
+
+async fn send_or_queue(api: &ApiClient, queue: &OfflineQueue, request: QueuedRequest) {
+    if dispatch(api, &request).await.is_err() {
+        let _ = queue.enqueue(&request);
+    }
+}
+
+async fn retry_pending(api: &ApiClient, queue: &OfflineQueue) -> Result<(), String> {
+    for path in queue.pending()? {
+        let request = queue.read(&path)?;
+        if dispatch(api, &request).await.is_err() {
+            break;
+        }
+        queue.remove(&path)?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use httpmock::prelude::*;
+
+    #[tokio::test]
+    async fn retry_removes_only_successfully_delivered_items() {
+        let server = MockServer::start();
+        let success = server.mock(|when, then| {
+            when.method(POST).path("/api/sessionForegroundApp/start");
+            then.status(200);
+        });
+        let directory = tempfile::tempdir().unwrap();
+        let queue = OfflineQueue::new(directory.path().to_path_buf()).unwrap();
+        queue
+            .enqueue(&QueuedRequest::AppEvent {
+                kind: "start".into(),
+                app_name: "Code.exe".into(),
+            })
+            .unwrap();
+
+        retry_pending(
+            &ApiClient::new(format!("{}/api", server.base_url()), "token".into()),
+            &queue,
+        )
+        .await
+        .unwrap();
+
+        success.assert();
+        assert!(queue.pending().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn retry_keeps_items_when_delivery_still_fails() {
+        let server = MockServer::start();
+        server.mock(|when, then| {
+            when.method(POST).path("/api/sessionForegroundApp/start");
+            then.status(503);
+        });
+        let directory = tempfile::tempdir().unwrap();
+        let queue = OfflineQueue::new(directory.path().to_path_buf()).unwrap();
+        queue
+            .enqueue(&QueuedRequest::AppEvent {
+                kind: "start".into(),
+                app_name: "Code.exe".into(),
+            })
+            .unwrap();
+
+        retry_pending(
+            &ApiClient::new(format!("{}/api", server.base_url()), "token".into()),
+            &queue,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(queue.pending().unwrap().len(), 1);
+    }
 }

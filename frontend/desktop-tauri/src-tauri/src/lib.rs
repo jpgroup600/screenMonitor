@@ -1,9 +1,12 @@
 mod api;
 mod core;
 mod monitor;
+mod offline_queue;
 mod platform;
 
 use monitor::MonitorSession;
+use offline_queue::OfflineQueue;
+use std::path::PathBuf;
 use std::{
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -18,11 +21,22 @@ use tauri_plugin_notification::NotificationExt;
 const BACKEND_URL: &str = "https://api-production-18d6.up.railway.app/api";
 const ATTENDANCE_REMINDER_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
-#[derive(Default)]
 struct AppState {
     session: Mutex<Option<MonitorSession>>,
     reminder: Mutex<Option<ReminderSession>>,
     token: Mutex<Option<String>>,
+    queue: Arc<OfflineQueue>,
+}
+
+impl AppState {
+    fn new(queue_directory: PathBuf) -> Result<Self, String> {
+        Ok(Self {
+            session: Mutex::new(None),
+            reminder: Mutex::new(None),
+            token: Mutex::new(None),
+            queue: Arc::new(OfflineQueue::new(queue_directory)?),
+        })
+    }
 }
 
 struct ReminderSession {
@@ -50,6 +64,7 @@ fn start_monitoring(
         BACKEND_URL.into(),
         token,
         Some(Duration::from_millis(interval_ms)),
+        state.queue.clone(),
     ));
     Ok(())
 }
@@ -65,6 +80,7 @@ fn start_attendance_monitoring(token: String, state: State<'_, AppState>) -> Res
         BACKEND_URL.into(),
         token,
         Some(Duration::from_secs(10 * 60)),
+        state.queue.clone(),
     ));
     Ok(())
 }
@@ -85,7 +101,11 @@ async fn capture_screenshot(state: State<'_, AppState>) -> Result<(), String> {
         .map_err(|e| e.to_string())?
         .clone()
         .ok_or("No active session")?;
-    monitor::capture_and_upload(&api::ApiClient::new(BACKEND_URL.into(), token)).await
+    monitor::capture_and_upload(
+        &api::ApiClient::new(BACKEND_URL.into(), token),
+        &state.queue,
+    )
+    .await
 }
 
 #[tauri::command]
@@ -149,7 +169,6 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_notification::init())
-        .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             start_monitoring,
             start_attendance_monitoring,
@@ -169,6 +188,8 @@ pub fn run() {
                 menu::{Menu, MenuItem},
                 tray::TrayIconBuilder,
             };
+            let queue_directory = app.path().app_data_dir()?.join("offline-queue");
+            app.manage(AppState::new(queue_directory).map_err(std::io::Error::other)?);
             app.autolaunch().enable()?;
             if core::is_autostart_launch(std::env::args()) {
                 if let Some(window) = app.get_webview_window("main") {

@@ -57,6 +57,10 @@ impl ApiClient {
 
     pub async fn upload(&self, path: &Path) -> Result<(), String> {
         let bytes = tokio::fs::read(path).await.map_err(|e| e.to_string())?;
+        self.upload_bytes(bytes).await
+    }
+
+    pub async fn upload_bytes(&self, bytes: Vec<u8>) -> Result<(), String> {
         let part = reqwest::multipart::Part::bytes(bytes)
             .file_name("screenshot.png")
             .mime_str("image/png")
