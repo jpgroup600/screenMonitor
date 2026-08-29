@@ -79,8 +79,33 @@ pub fn removable_drives() -> Vec<String> {
         .collect()
 }
 
+#[cfg(windows)]
+pub fn fixed_drives() -> Vec<String> {
+    use windows_sys::Win32::Storage::FileSystem::{GetDriveTypeW, GetLogicalDrives};
+    use windows_sys::Win32::System::WindowsProgramming::DRIVE_FIXED;
+    let drives = unsafe { GetLogicalDrives() };
+    (0..26)
+        .filter_map(|index| {
+            if drives & (1 << index) == 0 {
+                return None;
+            }
+            let root = format!("{}:\\", (b'A' + index as u8) as char);
+            let wide = root
+                .encode_utf16()
+                .chain(std::iter::once(0))
+                .collect::<Vec<_>>();
+            (unsafe { GetDriveTypeW(wide.as_ptr()) } == DRIVE_FIXED).then_some(root)
+        })
+        .collect()
+}
+
 #[cfg(not(windows))]
 pub fn removable_drives() -> Vec<String> {
+    Vec::new()
+}
+
+#[cfg(not(windows))]
+pub fn fixed_drives() -> Vec<String> {
     Vec::new()
 }
 

@@ -15,5 +15,7 @@ export const native = {
   startAttendanceReminders: () => invoke('start_attendance_reminders'),
   stopAttendanceReminders: () => invoke('stop_attendance_reminders'),
   listRemovableDrives: () => invoke('list_removable_drives'),
-  uploadBackupFile: (token, deviceId, source) => invoke('upload_backup_file', { token, deviceId, source })
+  listFixedDrives: () => invoke('list_fixed_drives'),
+  uploadBackupFile: (token, deviceId, source) => invoke('upload_backup_file', { token, deviceId, source }),
+  runIncrementalBackup: (token, deviceId, roots) => invoke('run_incremental_backup', { token, deviceId, roots })
 };

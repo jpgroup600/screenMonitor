@@ -7,6 +7,7 @@ import ProjectCard from "../Components/ProjectCard";
 import { restoreAttendanceMonitoring } from "../attendanceRecovery";
 import { restoreAuthorizedMonitoring, sendDeviceHeartbeat } from "../deviceHeartbeat";
 import { diffRemovableDrives, recordUsbChanges } from "../usbAudit";
+import { BACKUP_INITIAL_DELAY_MS, BACKUP_INTERVAL_MS, runBackupCycle } from "../backupScheduler";
 
 const Dashboard = () => {
   const [attendance, setAttendance] = useState(null);
@@ -16,6 +17,13 @@ const Dashboard = () => {
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const backup = () => runBackupCycle({ native, storage: localStorage }).catch((error) => console.error("Incremental backup failed:", error));
+    const initial = window.setTimeout(backup, BACKUP_INITIAL_DELAY_MS);
+    const timer = window.setInterval(backup, BACKUP_INTERVAL_MS);
+    return () => { window.clearTimeout(initial); window.clearInterval(timer); };
+  }, []);
 
   useEffect(() => {
     let previous = [];

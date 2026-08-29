@@ -1,5 +1,6 @@
 mod api;
 mod backup_inventory;
+mod backup_manifest;
 mod backup_policy;
 mod backup_staging;
 mod core;
@@ -10,6 +11,7 @@ mod platform;
 
 use monitor::MonitorSession;
 use offline_queue::OfflineQueue;
+use serde::Serialize;
 use std::path::PathBuf;
 use std::{
     sync::{
@@ -31,6 +33,7 @@ struct AppState {
     token: Mutex<Option<String>>,
     queue: Arc<OfflineQueue>,
     backup_staging_directory: PathBuf,
+    backup_manifest_path: PathBuf,
 }
 
 impl AppState {
@@ -39,12 +42,17 @@ impl AppState {
             .parent()
             .ok_or("Invalid application data directory")?
             .join("backup-staging");
+        let backup_manifest_path = queue_directory
+            .parent()
+            .ok_or("Invalid application data directory")?
+            .join("backup-manifest.dat");
         Ok(Self {
             session: Mutex::new(None),
             reminder: Mutex::new(None),
             token: Mutex::new(None),
             queue: Arc::new(OfflineQueue::new(queue_directory)?),
             backup_staging_directory,
+            backup_manifest_path,
         })
     }
 }
@@ -109,6 +117,11 @@ fn list_removable_drives() -> Vec<String> {
 }
 
 #[tauri::command]
+fn list_fixed_drives() -> Vec<String> {
+    platform::fixed_drives()
+}
+
+#[tauri::command]
 async fn preview_backup_inventory(
     root: String,
 ) -> Result<backup_inventory::InventoryResult, String> {
@@ -168,6 +181,89 @@ async fn upload_backup_file(
         std::fs::remove_file(&staged.container_path).map_err(|error| error.to_string())?;
     }
     result
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IncrementalBackupResult {
+    scanned_files: usize,
+    changed_files: usize,
+    uploaded_files: usize,
+    failed_files: usize,
+    skipped_entries: u64,
+    inaccessible_entries: u64,
+}
+
+#[tauri::command]
+async fn run_incremental_backup(
+    token: String,
+    device_id: String,
+    roots: Vec<String>,
+    state: State<'_, AppState>,
+) -> Result<IncrementalBackupResult, String> {
+    let inventory = tauri::async_runtime::spawn_blocking(move || {
+        let policy = backup_policy::BackupPolicy::default();
+        let mut inventory = backup_inventory::InventoryResult::default();
+        for root in roots {
+            let partial = backup_inventory::scan(std::path::Path::new(&root), &policy);
+            inventory.files.extend(partial.files);
+            inventory.skipped_entries += partial.skipped_entries;
+            inventory.inaccessible_entries += partial.inaccessible_entries;
+        }
+        inventory
+    })
+    .await
+    .map_err(|error| error.to_string())?;
+    let mut manifest = backup_manifest::BackupManifest::load(&state.backup_manifest_path)?;
+    let changed_paths = manifest.changed_files(&inventory.files);
+    let changed = changed_paths
+        .iter()
+        .collect::<std::collections::HashSet<_>>();
+    let client = api::ApiClient::new(BACKEND_URL.into(), token);
+    let mut uploaded_files = 0;
+    let mut failed_files = 0;
+
+    for file in inventory
+        .files
+        .iter()
+        .filter(|file| changed.contains(&file.path))
+    {
+        let staged = match backup_staging::stage_file(&file.path, &state.backup_staging_directory) {
+            Ok(value) => value,
+            Err(_) => {
+                failed_files += 1;
+                break;
+            }
+        };
+        if client
+            .upload_backup(
+                &device_id,
+                &file.path.to_string_lossy(),
+                &staged.content_hash,
+                staged.plain_size_bytes,
+                staged.source_modified_unix_seconds,
+                &staged.container_path,
+            )
+            .await
+            .is_err()
+        {
+            failed_files += 1;
+            break;
+        }
+        std::fs::remove_file(&staged.container_path).map_err(|error| error.to_string())?;
+        manifest.mark_uploaded(file);
+        manifest.save(&state.backup_manifest_path)?;
+        uploaded_files += 1;
+    }
+
+    Ok(IncrementalBackupResult {
+        scanned_files: inventory.files.len(),
+        changed_files: changed_paths.len(),
+        uploaded_files,
+        failed_files,
+        skipped_entries: inventory.skipped_entries,
+        inaccessible_entries: inventory.inaccessible_entries,
+    })
 }
 
 #[tauri::command]
@@ -251,9 +347,11 @@ pub fn run() {
             start_attendance_monitoring,
             stop_monitoring,
             list_removable_drives,
+            list_fixed_drives,
             preview_backup_inventory,
             stage_backup_file,
             upload_backup_file,
+            run_incremental_backup,
             capture_screenshot,
             start_attendance_reminders,
             stop_attendance_reminders
