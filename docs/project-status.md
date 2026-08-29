@@ -162,3 +162,12 @@
 - 앱 시작 시 장치 heartbeat 승인 후에만 모니터링 복구; 차단 응답이면 활성 세션과 네이티브 추적 종료
 - 데스크톱 차단 순서 테스트 포함 JavaScript 테스트 5개 통과
 - 최신 릴리스 실사용 검증: 장치 heartbeat HTTP 200 이후 monitoring ensure HTTP 200 순서 확인
+
+## 2026-08-30 USB·반출 감사 기반
+
+- `SecurityEvents` 테이블 및 API 추가
+- 지원 이벤트: `USB_CONNECTED`, `USB_DISCONNECTED`, `FILE_COPY`, `NETWORK_TRANSFER`
+- USB 연결은 Warning, 해제 및 일반 감사 이벤트는 Info 심각도로 기록
+- 직원 이벤트 등록 `POST /api/security-events`, 관리자 최근 이벤트 조회 `GET /api/security-events`
+- SecurityEvents 서비스 테스트 포함 .NET 테스트 15개 통과
+- 다음 단계: Windows 이동식 드라이브 감지와 관리자 보안 이벤트 화면
