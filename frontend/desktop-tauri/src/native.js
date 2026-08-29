@@ -7,8 +7,9 @@ export const native = {
     const win = getCurrentWindow();
     (await win.isMaximized()) ? win.unmaximize() : win.maximize();
   },
-  close: () => getCurrentWindow().close(),
+  close: () => getCurrentWindow().hide(),
   startMonitoring: (token, intervalMs) => invoke('start_monitoring', { token, intervalMs }),
+  startAttendanceMonitoring: (token) => invoke('start_attendance_monitoring', { token }),
   stopMonitoring: () => invoke('stop_monitoring'),
   captureScreenshot: () => invoke('capture_screenshot')
 };

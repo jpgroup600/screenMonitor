@@ -6,7 +6,9 @@ import {
   FaSpinner, 
   FaExclamationTriangle, 
   FaPlay,
-  FaSignOutAlt 
+  FaSignOutAlt,
+  FaClock,
+  FaStop
 } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
 import { native } from "../native";
@@ -17,6 +19,9 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [selectedProjectId, setSelectedProjectId] = useState(null);
+  const [attendance, setAttendance] = useState(null);
+  const [attendanceBusy, setAttendanceBusy] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const navigate = useNavigate();
 
   // Fetch user ID from local storage
@@ -25,6 +30,26 @@ const Dashboard = () => {
     if (storedUserId) {
       setUserId(storedUserId);
     }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const loadAttendance = async () => {
+      try {
+        const current = await request.get("/attendance/current");
+        setAttendance(current || null);
+        if (current) {
+          await native.startAttendanceMonitoring(localStorage.getItem("token"));
+        }
+      } catch (err) {
+        console.error("Failed to load attendance:", err);
+      }
+    };
+    loadAttendance();
   }, []);
 
   // Fetch projects when userId is available
@@ -52,9 +77,49 @@ const Dashboard = () => {
     setSelectedProjectId(projectId);
   };
 
+  const handleClockIn = async () => {
+    try {
+      setAttendanceBusy(true);
+      const current = await request.post("/attendance/clock-in", {});
+      setAttendance(current);
+      await native.startAttendanceMonitoring(localStorage.getItem("token"));
+    } catch (err) {
+      console.error("Failed to clock in:", err);
+      alert("출근 처리를 완료하지 못했습니다.");
+    } finally {
+      setAttendanceBusy(false);
+    }
+  };
+
+  const handleClockOut = async () => {
+    try {
+      setAttendanceBusy(true);
+      await request.post("/attendance/clock-out", {});
+      await native.stopMonitoring();
+      setAttendance(null);
+    } catch (err) {
+      console.error("Failed to clock out:", err);
+      alert("퇴근 처리를 완료하지 못했습니다.");
+    } finally {
+      setAttendanceBusy(false);
+    }
+  };
+
+  const formatElapsed = (startedAt) => {
+    const total = Math.max(0, Math.floor((now - new Date(startedAt).getTime()) / 1000));
+    const hours = String(Math.floor(total / 3600)).padStart(2, "0");
+    const minutes = String(Math.floor((total % 3600) / 60)).padStart(2, "0");
+    const seconds = String(total % 60).padStart(2, "0");
+    return `${hours}:${minutes}:${seconds}`;
+  };
+
   const handleStartSession = async () => {
     if (!selectedProjectId) {
       alert("Please select a project to start the session.");
+      return;
+    }
+    if (!attendance) {
+      alert("먼저 출근 시작 버튼을 눌러주세요.");
       return;
     }
   
@@ -118,8 +183,54 @@ const Dashboard = () => {
         </div>
 
         <p className="text-lg text-gray-400 mb-8">
-          Welcome to the dashboard! Select a project to start your session.
+          출근 상태와 오늘의 근무 시간을 확인하고 담당 프로젝트를 시작하세요.
         </p>
+
+        <section className="mb-8 rounded-2xl border border-gray-700 bg-gray-800 p-6 shadow-xl">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="mb-2 flex items-center text-gray-400">
+                <FaClock className="mr-2 text-blue-400" />
+                오늘의 출퇴근
+              </div>
+              {attendance ? (
+                <>
+                  <p className="text-sm text-green-400">근무 중</p>
+                  <p className="mt-1 font-mono text-5xl font-bold tracking-tight">
+                    {formatElapsed(attendance.clockInAt)}
+                  </p>
+                  <p className="mt-2 text-sm text-gray-400">
+                    출근 {new Date(attendance.clockInAt).toLocaleTimeString()}
+                    <span className="mx-2">·</span>
+                    누적 유휴 {attendance.totalIdleDuration || "00:00:00"}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm text-gray-400">아직 출근 전입니다.</p>
+                  <p className="mt-1 text-3xl font-semibold">출근 준비</p>
+                </>
+              )}
+            </div>
+            {attendance ? (
+              <button
+                onClick={handleClockOut}
+                disabled={attendanceBusy}
+                className="flex items-center justify-center rounded-xl bg-red-600 px-7 py-4 text-lg font-semibold transition hover:bg-red-700 disabled:opacity-60"
+              >
+                <FaStop className="mr-3" /> 퇴근
+              </button>
+            ) : (
+              <button
+                onClick={handleClockIn}
+                disabled={attendanceBusy}
+                className="flex items-center justify-center rounded-xl bg-green-600 px-7 py-4 text-lg font-semibold transition hover:bg-green-700 disabled:opacity-60"
+              >
+                <FaPlay className="mr-3" /> 출근 시작
+              </button>
+            )}
+          </div>
+        </section>
 
         {/* Loading State */}
         {loading && (
@@ -156,15 +267,15 @@ const Dashboard = () => {
           <div className="fixed bottom-8 right-8">
             <button
               onClick={handleStartSession}
-              disabled={!selectedProjectId}
+              disabled={!selectedProjectId || !attendance}
               className={`flex items-center px-8 py-3 rounded-lg text-lg font-semibold transition-all duration-300 ${
-                selectedProjectId
+                selectedProjectId && attendance
                   ? "bg-blue-600 hover:bg-blue-700 shadow-lg hover:shadow-xl"
                   : "bg-gray-600 cursor-not-allowed"
               }`}
             >
               <FaPlay className="mr-3" />
-              Start Session
+              프로젝트 업무 시작
             </button>
           </div>
         )}

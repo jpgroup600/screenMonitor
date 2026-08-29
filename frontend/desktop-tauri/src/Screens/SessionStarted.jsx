@@ -16,6 +16,7 @@ const SessionStarted = () => {
       const response = await request.post(endpoint, { projectId: String(projectId) });
       console.log("Session end response:", response);
       await native.stopMonitoring();
+      await native.startAttendanceMonitoring(localStorage.getItem("token"));
       // Optionally, navigate back to the dashboard after ending the session.
       navigate("/");
     } catch (error) {

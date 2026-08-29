@@ -22,6 +22,84 @@ namespace ScreenshotMonitor.Data.Migrations
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("ScreenshotMonitor.Data.Entities.AttendanceIdlePeriod", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<string>("AttendanceRecordId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<TimeSpan>("Duration")
+                        .HasColumnType("interval");
+
+                    b.Property<DateTime?>("EndedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("StartedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AttendanceRecordId");
+
+                    b.ToTable("AttendanceIdlePeriods");
+                });
+
+            modelBuilder.Entity("ScreenshotMonitor.Data.Entities.AttendanceRecord", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("ClockOutAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("ClockInAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("EmployeeId")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<TimeSpan>("TotalIdleDuration")
+                        .HasColumnType("interval");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EmployeeId")
+                        .IsUnique()
+                        .HasFilter("\"Status\" = 'Active'");
+
+                    b.ToTable("AttendanceRecords");
+                });
+
+            modelBuilder.Entity("ScreenshotMonitor.Data.Entities.AttendanceIdlePeriod", b =>
+                {
+                    b.HasOne("ScreenshotMonitor.Data.Entities.AttendanceRecord", "AttendanceRecord")
+                        .WithMany("IdlePeriods")
+                        .HasForeignKey("AttendanceRecordId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AttendanceRecord");
+                });
+
+            modelBuilder.Entity("ScreenshotMonitor.Data.Entities.AttendanceRecord", b =>
+                {
+                    b.HasOne("ScreenshotMonitor.Data.Entities.User", "Employee")
+                        .WithMany()
+                        .HasForeignKey("EmployeeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Employee");
+                });
+
             modelBuilder.Entity("ScreenshotMonitor.Data.Entities.Project", b =>
                 {
                     b.Property<string>("Id")
@@ -245,6 +323,11 @@ namespace ScreenshotMonitor.Data.Migrations
                         .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Admin");
+                });
+
+            modelBuilder.Entity("ScreenshotMonitor.Data.Entities.AttendanceRecord", b =>
+                {
+                    b.Navigation("IdlePeriods");
                 });
 
             modelBuilder.Entity("ScreenshotMonitor.Data.Entities.ProjectEmployee", b =>

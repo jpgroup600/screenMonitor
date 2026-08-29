@@ -24,24 +24,39 @@ impl MonitorSession {
     }
 }
 
-pub fn spawn(base_url: String, token: String, screenshot_interval: Duration) -> MonitorSession {
+pub fn spawn(
+    base_url: String,
+    token: String,
+    screenshot_interval: Option<Duration>,
+) -> MonitorSession {
     let running = Arc::new(AtomicBool::new(true));
     let task_running = running.clone();
     tauri::async_runtime::spawn(async move {
         let api = ApiClient::new(base_url, token);
         let tracker = Arc::new(Mutex::new(ActivityTracker::default()));
         let mut activity_tick = tokio::time::interval(Duration::from_secs(1));
-        let mut screenshot_tick =
-            tokio::time::interval(screenshot_interval.max(Duration::from_secs(5)));
+        let mut screenshot_tick = tokio::time::interval(
+            screenshot_interval
+                .unwrap_or(Duration::from_secs(24 * 60 * 60))
+                .max(Duration::from_secs(5)),
+        );
         while task_running.load(Ordering::SeqCst) {
             tokio::select! {
                 _ = activity_tick.tick() => {
                     let app = if platform::idle_seconds() >= 15 { "idle".into() } else { platform::active_application() };
                     let transition = tracker.lock().await.transition(app);
-                    if let Some(name) = transition.ended { let _ = api.app_event("end", &name).await; }
-                    if let Some(name) = transition.started { let _ = api.app_event("start", &name).await; }
+                    if let Some(name) = transition.ended {
+                        if name == "idle" { let _ = api.attendance_idle_event("end").await; }
+                        let _ = api.app_event("end", &name).await;
+                    }
+                    if let Some(name) = transition.started {
+                        if name == "idle" { let _ = api.attendance_idle_event("start").await; }
+                        let _ = api.app_event("start", &name).await;
+                    }
                 }
-                _ = screenshot_tick.tick() => { let _ = capture_and_upload(&api).await; }
+                _ = screenshot_tick.tick() => {
+                    if screenshot_interval.is_some() { let _ = capture_and_upload(&api).await; }
+                }
             }
         }
         let final_app = tracker.lock().await.finish();

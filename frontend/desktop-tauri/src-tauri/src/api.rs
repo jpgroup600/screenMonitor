@@ -15,6 +15,11 @@ struct AppEvent<'a> {
     app_name: &'a str,
 }
 
+#[derive(Serialize)]
+struct IdleEvent<'a> {
+    event: &'a str,
+}
+
 impl ApiClient {
     pub fn new(base_url: String, token: String) -> Self {
         Self {
@@ -29,6 +34,19 @@ impl ApiClient {
             .post(format!("{}/sessionForegroundApp/{}", self.base_url, kind))
             .bearer_auth(&self.token)
             .json(&AppEvent { app_name })
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub async fn attendance_idle_event(&self, event: &str) -> Result<(), String> {
+        self.client
+            .post(format!("{}/attendance/idle", self.base_url))
+            .bearer_auth(&self.token)
+            .json(&IdleEvent { event })
             .send()
             .await
             .map_err(|e| e.to_string())?
@@ -73,6 +91,23 @@ mod tests {
         });
         ApiClient::new(format!("{}/api", server.base_url()), "test-token".into())
             .app_event("start", "Code.exe")
+            .await
+            .unwrap();
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn sends_attendance_idle_transition() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(POST)
+                .path("/api/attendance/idle")
+                .header("authorization", "Bearer test-token")
+                .json_body_obj(&serde_json::json!({"event":"start"}));
+            then.status(204);
+        });
+        ApiClient::new(format!("{}/api", server.base_url()), "test-token".into())
+            .attendance_idle_event("start")
             .await
             .unwrap();
         mock.assert();

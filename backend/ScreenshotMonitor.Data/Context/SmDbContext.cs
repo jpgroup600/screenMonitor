@@ -66,6 +66,23 @@ namespace ScreenshotMonitor.Data.Context
                 .WithMany(s => s.BackgroundApps)
                 .HasForeignKey(bg => bg.SessionId)
                 .OnDelete(DeleteBehavior.Cascade); // Deleting a session deletes all background apps
+
+            modelBuilder.Entity<AttendanceRecord>()
+                .HasOne(a => a.Employee)
+                .WithMany()
+                .HasForeignKey(a => a.EmployeeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<AttendanceRecord>()
+                .HasIndex(a => a.EmployeeId)
+                .HasFilter("\"Status\" = 'Active'")
+                .IsUnique();
+
+            modelBuilder.Entity<AttendanceIdlePeriod>()
+                .HasOne(i => i.AttendanceRecord)
+                .WithMany(a => a.IdlePeriods)
+                .HasForeignKey(i => i.AttendanceRecordId)
+                .OnDelete(DeleteBehavior.Cascade);
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -98,5 +115,7 @@ namespace ScreenshotMonitor.Data.Context
         public DbSet<Screenshot> Screenshots { get; set; }
         public DbSet<SessionBackgroundApp> SessionBackgroundApps {  get; set; } 
         public DbSet<SessionForegroundApp> SessionForegroundApps { get; set; }
+        public DbSet<AttendanceRecord> AttendanceRecords { get; set; }
+        public DbSet<AttendanceIdlePeriod> AttendanceIdlePeriods { get; set; }
     }
 }

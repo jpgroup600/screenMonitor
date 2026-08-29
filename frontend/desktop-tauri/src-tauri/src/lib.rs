@@ -29,8 +29,19 @@ fn start_monitoring(
     *session = Some(monitor::spawn(
         BACKEND_URL.into(),
         token,
-        Duration::from_millis(interval_ms),
+        Some(Duration::from_millis(interval_ms)),
     ));
+    Ok(())
+}
+
+#[tauri::command]
+fn start_attendance_monitoring(token: String, state: State<'_, AppState>) -> Result<(), String> {
+    let mut session = state.session.lock().map_err(|e| e.to_string())?;
+    if let Some(existing) = session.take() {
+        existing.stop();
+    }
+    *state.token.lock().map_err(|e| e.to_string())? = Some(token.clone());
+    *session = Some(monitor::spawn(BACKEND_URL.into(), token, None));
     Ok(())
 }
 
@@ -59,6 +70,7 @@ pub fn run() {
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             start_monitoring,
+            start_attendance_monitoring,
             stop_monitoring,
             capture_screenshot
         ])
@@ -68,8 +80,7 @@ pub fn run() {
                 tray::TrayIconBuilder,
             };
             let show = MenuItem::with_id(app, "show", "Restore", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show, &quit])?;
+            let menu = Menu::with_items(app, &[&show])?;
             TrayIconBuilder::new()
                 .menu(&menu)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -79,7 +90,6 @@ pub fn run() {
                             let _ = window.set_focus();
                         }
                     }
-                    "quit" => app.exit(0),
                     _ => {}
                 })
                 .build(app)?;

@@ -11,6 +11,7 @@ using System.Text.Json.Serialization;
 using ScreenshotMonitor.Data.Interfaces;
 using ScreenshotMonitor.SignalR;
 using Microsoft.Extensions.FileProviders;
+using ScreenshotMonitor.Data.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,6 +38,8 @@ builder.Services.AddScoped<ISessionRepository, SessionRepository>();
 builder.Services.AddScoped<ISessionAppsRepository, SessionAppsRepository>();
 builder.Services.AddScoped<IScreenshotRepository, ScreenshotRepository>();
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<AttendanceService>();
 
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
