@@ -1,6 +1,7 @@
 use crate::data_protection::protect;
 #[cfg(test)]
 use crate::data_protection::unprotect;
+use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File},
     io::{Read, Write},
@@ -13,7 +14,17 @@ const MAGIC: &[u8; 8] = b"SMBACK01";
 const CHUNK_BYTES: usize = 1024 * 1024;
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
-pub fn stage_file(source: &Path, staging_directory: &Path) -> Result<PathBuf, String> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StagedBackup {
+    pub container_path: PathBuf,
+    pub content_hash: String,
+    pub plain_size_bytes: u64,
+    pub source_modified_unix_seconds: u64,
+}
+
+pub fn stage_file(source: &Path, staging_directory: &Path) -> Result<StagedBackup, String> {
+    let metadata = fs::metadata(source).map_err(|error| error.to_string())?;
+    let content_hash = sha256_file(source)?;
     fs::create_dir_all(staging_directory).map_err(|error| error.to_string())?;
     let id = format!(
         "{:020}-{:06}",
@@ -29,7 +40,31 @@ pub fn stage_file(source: &Path, staging_directory: &Path) -> Result<PathBuf, St
     if result.is_err() {
         let _ = fs::remove_file(&pending_path);
     }
-    result.map(|_| completed_path)
+    result.map(|_| StagedBackup {
+        container_path: completed_path,
+        content_hash,
+        plain_size_bytes: metadata.len(),
+        source_modified_unix_seconds: metadata
+            .modified()
+            .ok()
+            .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+            .map(|value| value.as_secs())
+            .unwrap_or_default(),
+    })
+}
+
+fn sha256_file(path: &Path) -> Result<String, String> {
+    let mut file = File::open(path).map_err(|error| error.to_string())?;
+    let mut hasher = Sha256::new();
+    let mut buffer = vec![0_u8; CHUNK_BYTES];
+    loop {
+        let read = file.read(&mut buffer).map_err(|error| error.to_string())?;
+        if read == 0 {
+            break;
+        }
+        hasher.update(&buffer[..read]);
+    }
+    Ok(format!("{:x}", hasher.finalize()))
 }
 
 fn write_encrypted_container(source: &Path, destination: &Path) -> Result<(), String> {
@@ -106,15 +141,20 @@ mod tests {
         let staged = stage_file(&source, &directory.path().join("staging")).unwrap();
 
         assert_eq!(
-            staged.extension().and_then(|value| value.to_str()),
+            staged
+                .container_path
+                .extension()
+                .and_then(|value| value.to_str()),
             Some("backup")
         );
-        assert!(!fs::read(&staged)
+        assert!(!fs::read(&staged.container_path)
             .unwrap()
             .windows(32)
             .any(|window| window == &plaintext[..32]));
-        restore_file(&staged, &restored).unwrap();
+        restore_file(&staged.container_path, &restored).unwrap();
         assert_eq!(fs::read(restored).unwrap(), plaintext);
+        assert_eq!(staged.content_hash.len(), 64);
+        assert_eq!(staged.plain_size_bytes, (CHUNK_BYTES + 123) as u64);
     }
 
     #[test]

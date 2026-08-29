@@ -133,10 +133,41 @@ async fn stage_backup_file(source: String, state: State<'_, AppState>) -> Result
     let staging_directory = state.backup_staging_directory.clone();
     tauri::async_runtime::spawn_blocking(move || {
         backup_staging::stage_file(&source, &staging_directory)
-            .map(|path| path.to_string_lossy().into_owned())
+            .map(|backup| backup.container_path.to_string_lossy().into_owned())
     })
     .await
     .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn upload_backup_file(
+    token: String,
+    device_id: String,
+    source: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let source_path = PathBuf::from(&source);
+    let metadata = std::fs::metadata(&source_path).map_err(|error| error.to_string())?;
+    if let Some(reason) =
+        backup_policy::BackupPolicy::default().exclusion_reason(&source_path, Some(metadata.len()))
+    {
+        return Err(format!("File excluded by backup policy: {reason:?}"));
+    }
+    let staged = backup_staging::stage_file(&source_path, &state.backup_staging_directory)?;
+    let result = api::ApiClient::new(BACKEND_URL.into(), token)
+        .upload_backup(
+            &device_id,
+            &source,
+            &staged.content_hash,
+            staged.plain_size_bytes,
+            staged.source_modified_unix_seconds,
+            &staged.container_path,
+        )
+        .await;
+    if result.is_ok() {
+        std::fs::remove_file(&staged.container_path).map_err(|error| error.to_string())?;
+    }
+    result
 }
 
 #[tauri::command]
@@ -222,6 +253,7 @@ pub fn run() {
             list_removable_drives,
             preview_backup_inventory,
             stage_backup_file,
+            upload_backup_file,
             capture_screenshot,
             start_attendance_reminders,
             stop_attendance_reminders

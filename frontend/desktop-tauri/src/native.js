@@ -14,5 +14,6 @@ export const native = {
   captureScreenshot: () => invoke('capture_screenshot'),
   startAttendanceReminders: () => invoke('start_attendance_reminders'),
   stopAttendanceReminders: () => invoke('stop_attendance_reminders'),
-  listRemovableDrives: () => invoke('list_removable_drives')
+  listRemovableDrives: () => invoke('list_removable_drives'),
+  uploadBackupFile: (token, deviceId, source) => invoke('upload_backup_file', { token, deviceId, source })
 };

@@ -14,13 +14,14 @@ public class BackupsController(BackupService service) : ControllerBase
     [HttpPost("upload"), RequestSizeLimit(1_200_000_000), RequestFormLimits(MultipartBodyLengthLimit = 1_200_000_000)]
     public async Task<ActionResult<BackupUploadResponseDto>> Upload(
         [FromForm] string deviceId, [FromForm] string originalPath, [FromForm] string contentHash,
-        [FromForm] long plainSizeBytes, [FromForm] DateTime sourceModifiedAt, [FromForm] IFormFile encryptedFile,
+        [FromForm] long plainSizeBytes, [FromForm] long sourceModifiedUnixSeconds, [FromForm] IFormFile encryptedFile,
         CancellationToken cancellationToken)
     {
         if (encryptedFile.Length == 0) return BadRequest(new { message = "Encrypted backup file is required." });
         try
         {
             await using var stream = encryptedFile.OpenReadStream();
+            var sourceModifiedAt = DateTimeOffset.FromUnixTimeSeconds(sourceModifiedUnixSeconds).UtcDateTime;
             var (version, deduplicated) = await service.UploadAsync(EmployeeId, deviceId, originalPath, contentHash,
                 plainSizeBytes, sourceModifiedAt, stream, encryptedFile.Length, cancellationToken);
             return Ok(new BackupUploadResponseDto(version.BackupFileId, version.Id, version.ObjectKey, deduplicated, version.UploadedAt));
