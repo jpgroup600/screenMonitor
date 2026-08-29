@@ -2,6 +2,7 @@ mod api;
 mod backup_inventory;
 mod backup_manifest;
 mod backup_policy;
+mod backup_retry;
 mod backup_staging;
 mod core;
 mod data_protection;
@@ -34,6 +35,7 @@ struct AppState {
     queue: Arc<OfflineQueue>,
     backup_staging_directory: PathBuf,
     backup_manifest_path: PathBuf,
+    backup_retry_directory: PathBuf,
 }
 
 impl AppState {
@@ -46,6 +48,10 @@ impl AppState {
             .parent()
             .ok_or("Invalid application data directory")?
             .join("backup-manifest.dat");
+        let backup_retry_directory = queue_directory
+            .parent()
+            .ok_or("Invalid application data directory")?
+            .join("backup-retry");
         Ok(Self {
             session: Mutex::new(None),
             reminder: Mutex::new(None),
@@ -53,6 +59,7 @@ impl AppState {
             queue: Arc::new(OfflineQueue::new(queue_directory)?),
             backup_staging_directory,
             backup_manifest_path,
+            backup_retry_directory,
         })
     }
 }
@@ -215,13 +222,51 @@ async fn run_incremental_backup(
     .await
     .map_err(|error| error.to_string())?;
     let mut manifest = backup_manifest::BackupManifest::load(&state.backup_manifest_path)?;
+    let retry_queue = backup_retry::BackupRetryQueue::new(state.backup_retry_directory.clone())?;
+    let client = api::ApiClient::new(BACKEND_URL.into(), token);
+    let mut uploaded_files = 0;
+    let mut failed_files = 0;
+
+    for (job_path, pending) in retry_queue.pending()? {
+        if client
+            .upload_backup(
+                &pending.device_id,
+                &pending.source_path.to_string_lossy(),
+                &pending.content_hash,
+                pending.plain_size_bytes,
+                pending.source_modified_unix_seconds,
+                &pending.container_path,
+            )
+            .await
+            .is_err()
+        {
+            failed_files += 1;
+            break;
+        }
+        let inventory_file = backup_inventory::InventoryFile {
+            path: pending.source_path.clone(),
+            size_bytes: pending.plain_size_bytes,
+            modified_unix_seconds: Some(pending.source_modified_unix_seconds),
+        };
+        retry_queue.complete(&job_path, &pending.container_path)?;
+        manifest.mark_uploaded(&inventory_file);
+        manifest.save(&state.backup_manifest_path)?;
+        uploaded_files += 1;
+    }
+    if failed_files > 0 {
+        return Ok(IncrementalBackupResult {
+            scanned_files: inventory.files.len(),
+            changed_files: 0,
+            uploaded_files,
+            failed_files,
+            skipped_entries: inventory.skipped_entries,
+            inaccessible_entries: inventory.inaccessible_entries,
+        });
+    }
     let changed_paths = manifest.changed_files(&inventory.files);
     let changed = changed_paths
         .iter()
         .collect::<std::collections::HashSet<_>>();
-    let client = api::ApiClient::new(BACKEND_URL.into(), token);
-    let mut uploaded_files = 0;
-    let mut failed_files = 0;
 
     for file in inventory
         .files
@@ -247,6 +292,14 @@ async fn run_incremental_backup(
             .await
             .is_err()
         {
+            retry_queue.enqueue(&backup_retry::PendingBackup {
+                device_id: device_id.clone(),
+                source_path: file.path.clone(),
+                container_path: staged.container_path.clone(),
+                content_hash: staged.content_hash.clone(),
+                plain_size_bytes: staged.plain_size_bytes,
+                source_modified_unix_seconds: staged.source_modified_unix_seconds,
+            })?;
             failed_files += 1;
             break;
         }
