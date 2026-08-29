@@ -44,6 +44,7 @@ namespace ScreenshotMonitor.Data.Context
                 .HasOne(s => s.Project)
                 .WithMany()
                 .HasForeignKey(s => s.ProjectId)
+                .IsRequired(false)
                 .OnDelete(DeleteBehavior.Cascade); // Deleting a project deletes all related sessions
 
             // Screenshot -> Session

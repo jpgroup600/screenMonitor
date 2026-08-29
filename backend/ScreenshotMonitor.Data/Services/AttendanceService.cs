@@ -21,7 +21,11 @@ public class AttendanceService(SmDbContext dbContext, TimeProvider timeProvider)
     public async Task<AttendanceRecord> ClockInAsync(string employeeId)
     {
         var existing = await GetCurrentAsync(employeeId, true);
-        if (existing is not null) return existing;
+        if (existing is not null)
+        {
+            await EnsureMonitoringSessionAsync(employeeId);
+            return existing;
+        }
 
         var record = new AttendanceRecord
         {
@@ -29,6 +33,7 @@ public class AttendanceService(SmDbContext dbContext, TimeProvider timeProvider)
             ClockInAt = timeProvider.GetUtcNow().UtcDateTime
         };
         dbContext.AttendanceRecords.Add(record);
+        dbContext.Sessions.Add(CreateMonitoringSession(employeeId));
         await dbContext.SaveChangesAsync();
         return record;
     }
@@ -40,10 +45,18 @@ public class AttendanceService(SmDbContext dbContext, TimeProvider timeProvider)
 
         var now = timeProvider.GetUtcNow().UtcDateTime;
         CloseIdlePeriod(record, now);
+        await CompleteActiveSessionsAsync(employeeId, now);
         record.ClockOutAt = now;
         record.Status = "Complete";
         await dbContext.SaveChangesAsync();
         return record;
+    }
+
+    public async Task<bool> ResumeMonitoringAsync(string employeeId)
+    {
+        if (await GetCurrentAsync(employeeId) is null) return false;
+        await EnsureMonitoringSessionAsync(employeeId);
+        return true;
     }
 
     public async Task<bool> RecordIdleAsync(string employeeId, string eventName)
@@ -122,6 +135,47 @@ public class AttendanceService(SmDbContext dbContext, TimeProvider timeProvider)
     private Task<AttendanceRecord?> ActiveWithIdlePeriods(string employeeId) =>
         dbContext.AttendanceRecords.Include(x => x.IdlePeriods).FirstOrDefaultAsync(x =>
             x.EmployeeId == employeeId && x.Status == "Active");
+
+    private async Task EnsureMonitoringSessionAsync(string employeeId)
+    {
+        var hasActiveSession = await dbContext.Sessions.AnyAsync(x =>
+            x.EmployeeId == employeeId && x.Status == "Active");
+        if (hasActiveSession) return;
+
+        dbContext.Sessions.Add(CreateMonitoringSession(employeeId));
+        await dbContext.SaveChangesAsync();
+    }
+
+    private Session CreateMonitoringSession(string employeeId) => new()
+    {
+        EmployeeId = employeeId,
+        ProjectId = null,
+        StartTime = timeProvider.GetUtcNow().UtcDateTime,
+        ActiveDuration = TimeSpan.Zero,
+        Status = "Active"
+    };
+
+    private async Task CompleteActiveSessionsAsync(string employeeId, DateTime endedAt)
+    {
+        var sessions = await dbContext.Sessions
+            .Include(x => x.ForegroundApps)
+            .Where(x => x.EmployeeId == employeeId && x.Status == "Active")
+            .ToListAsync();
+
+        foreach (var session in sessions)
+        {
+            foreach (var app in session.ForegroundApps.Where(x => x.Status == "Active"))
+            {
+                app.EndTime = endedAt;
+                app.TotalUsageTime = endedAt - app.StartTime;
+                app.Status = "Inactive";
+            }
+
+            session.EndTime = endedAt;
+            session.ActiveDuration = endedAt - session.StartTime;
+            session.Status = "Complete";
+        }
+    }
 
     private static void CloseIdlePeriod(AttendanceRecord record, DateTime endedAt)
     {

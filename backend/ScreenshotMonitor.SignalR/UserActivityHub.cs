@@ -46,25 +46,8 @@ public class UserActivityHub : Hub
             await Clients.All.SendAsync("UserStatusChanged", employeeId, userEntry.Value.Role, false);
             _logger.LogInformation("User {EmployeeId} disconnected.", employeeId);
 
-            try
-            {
-                // End active project ID for the employee
-                var projectId = await _sessionRepository.EndSessionAutoOnDisconnectAsync(employeeId, "Active");
-
-                if (!string.IsNullOrEmpty(projectId))
-                {
-                    _logger.LogInformation("Ending active session for Employee {EmployeeId} in Project {ProjectId}", employeeId, projectId);
-                    await _sessionRepository.EndSessionAsync(employeeId, projectId);
-                }
-                else
-                {
-                    _logger.LogWarning("No active session found for Employee {EmployeeId} on disconnect.", employeeId);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error ending session for Employee {EmployeeId} on disconnect.", employeeId);
-            }
+            // A network or SignalR reconnect must not end attendance monitoring.
+            // Sessions end explicitly when the employee clocks out or changes project.
         }
 
         await base.OnDisconnectedAsync(exception);

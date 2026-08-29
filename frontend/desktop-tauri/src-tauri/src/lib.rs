@@ -41,7 +41,11 @@ fn start_attendance_monitoring(token: String, state: State<'_, AppState>) -> Res
         existing.stop();
     }
     *state.token.lock().map_err(|e| e.to_string())? = Some(token.clone());
-    *session = Some(monitor::spawn(BACKEND_URL.into(), token, None));
+    *session = Some(monitor::spawn(
+        BACKEND_URL.into(),
+        token,
+        Some(Duration::from_secs(10 * 60)),
+    ));
     Ok(())
 }
 

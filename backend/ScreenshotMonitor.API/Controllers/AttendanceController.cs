@@ -37,6 +37,13 @@ public class AttendanceController(AttendanceService attendanceService) : Control
         return Ok(ToResponse(record));
     }
 
+    [HttpPost("resume-monitoring")]
+    public async Task<IActionResult> ResumeMonitoring()
+    {
+        var resumed = await attendanceService.ResumeMonitoringAsync(EmployeeId);
+        return resumed ? NoContent() : NotFound(new { message = "No active attendance record." });
+    }
+
     [HttpPost("idle")]
     public async Task<IActionResult> Idle([FromBody] IdleEventRequestDto request)
     {
