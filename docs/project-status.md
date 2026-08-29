@@ -97,3 +97,12 @@
 
 - [엔드포인트 백업·보안 기능 제안서](./endpoint-backup-security-proposal.md)
 - [Tauri 데스크톱 실행 안내](../frontend/desktop-tauri/README.md)
+
+## 2026-08-30 관리자 검증 화면 배포
+
+- 커밋: `582f893` (`feat: show attendance sessions in admin dashboard`)
+- Railway API 배포: `b836f98d-cd90-4745-a9fa-e9ee8e515548` 성공
+- 기존 프로젝트별 세션 URL에서도 해당 직원의 일반 근무 세션과 프로젝트 세션을 함께 표시
+- 목록 및 상세 데이터는 10초마다 갱신
+- 실제 관리자 요청 `GET /api/session/employee/{employeeId}` HTTP 200 확인
+- 듀얼 모니터 동시 캡처가 서로 덮어쓰지 않도록 밀리초와 UUID를 포함한 파일명 적용
