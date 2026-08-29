@@ -13,6 +13,14 @@ use std::{
 struct FileSignature {
     size_bytes: u64,
     modified_unix_seconds: Option<u64>,
+    #[serde(default)]
+    content_hash: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MissingFile {
+    pub path: PathBuf,
+    pub content_hash: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -52,14 +60,54 @@ impl BackupManifest {
             .collect()
     }
 
-    pub fn mark_uploaded(&mut self, file: &InventoryFile) {
+    pub fn mark_uploaded(&mut self, file: &InventoryFile, content_hash: Option<String>) {
         self.files.insert(
             key(&file.path),
             FileSignature {
                 size_bytes: file.size_bytes,
                 modified_unix_seconds: file.modified_unix_seconds,
+                content_hash,
             },
         );
+    }
+
+    pub fn missing_files(&self, inventory: &[InventoryFile]) -> Vec<MissingFile> {
+        let current = inventory
+            .iter()
+            .map(|file| key(&file.path))
+            .collect::<std::collections::HashSet<_>>();
+        self.files
+            .iter()
+            .filter(|(path, _)| !current.contains(*path))
+            .map(|(path, signature)| MissingFile {
+                path: PathBuf::from(path.replace('/', "\\")),
+                content_hash: signature.content_hash.clone(),
+            })
+            .collect()
+    }
+
+    pub fn remove(&mut self, path: &Path) {
+        self.files.remove(&key(path));
+    }
+
+    pub fn relocated_to(
+        &self,
+        missing: &MissingFile,
+        inventory: &[InventoryFile],
+    ) -> Option<PathBuf> {
+        let hash = missing.content_hash.as_ref()?;
+        inventory
+            .iter()
+            .find(|file| {
+                let path_key = key(&file.path);
+                path_key != key(&missing.path)
+                    && self
+                        .files
+                        .get(&path_key)
+                        .and_then(|signature| signature.content_hash.as_ref())
+                        == Some(hash)
+            })
+            .map(|file| file.path.clone())
     }
 }
 
@@ -85,8 +133,8 @@ mod tests {
         let changed = file(r"C:\Work\changed.txt", 10, 1);
         let new_file = file(r"C:\Work\new.txt", 5, 1);
         let mut manifest = BackupManifest::default();
-        manifest.mark_uploaded(&unchanged);
-        manifest.mark_uploaded(&changed);
+        manifest.mark_uploaded(&unchanged, Some("a".repeat(64)));
+        manifest.mark_uploaded(&changed, Some("b".repeat(64)));
         let changed_later = file(r"C:\Work\changed.txt", 11, 2);
 
         assert_eq!(
@@ -100,7 +148,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("manifest.dat");
         let mut manifest = BackupManifest::default();
-        manifest.mark_uploaded(&file(r"C:\Work\same.txt", 10, 1));
+        manifest.mark_uploaded(&file(r"C:\Work\same.txt", 10, 1), Some("a".repeat(64)));
 
         manifest.save(&path).unwrap();
 
@@ -109,5 +157,37 @@ mod tests {
             serde_json::to_vec(&manifest).unwrap()
         );
         assert_eq!(BackupManifest::load(&path).unwrap(), manifest);
+    }
+
+    #[test]
+    fn reports_paths_missing_from_the_current_inventory_with_their_hash() {
+        let kept = file(r"C:\Work\kept.txt", 10, 1);
+        let removed = file(r"C:\Work\removed.txt", 20, 1);
+        let mut manifest = BackupManifest::default();
+        manifest.mark_uploaded(&kept, Some("a".repeat(64)));
+        manifest.mark_uploaded(&removed, Some("b".repeat(64)));
+
+        assert_eq!(
+            manifest.missing_files(&[kept]),
+            vec![MissingFile {
+                path: PathBuf::from(r"c:\work\removed.txt"),
+                content_hash: Some("b".repeat(64)),
+            }]
+        );
+    }
+
+    #[test]
+    fn matches_a_missing_file_to_a_new_path_with_the_same_hash() {
+        let old = file(r"C:\Work\old.txt", 10, 1);
+        let new = file(r"D:\Archive\new.txt", 10, 2);
+        let mut manifest = BackupManifest::default();
+        manifest.mark_uploaded(&old, Some("a".repeat(64)));
+        manifest.mark_uploaded(&new, Some("a".repeat(64)));
+        let missing = manifest.missing_files(std::slice::from_ref(&new));
+
+        assert_eq!(
+            manifest.relocated_to(&missing[0], &[new]),
+            Some(PathBuf::from(r"D:\Archive\new.txt"))
+        );
     }
 }

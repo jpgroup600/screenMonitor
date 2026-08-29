@@ -249,7 +249,7 @@ async fn run_incremental_backup(
             modified_unix_seconds: Some(pending.source_modified_unix_seconds),
         };
         retry_queue.complete(&job_path, &pending.container_path)?;
-        manifest.mark_uploaded(&inventory_file);
+        manifest.mark_uploaded(&inventory_file, Some(pending.content_hash.clone()));
         manifest.save(&state.backup_manifest_path)?;
         uploaded_files += 1;
     }
@@ -304,9 +304,35 @@ async fn run_incremental_backup(
             break;
         }
         std::fs::remove_file(&staged.container_path).map_err(|error| error.to_string())?;
-        manifest.mark_uploaded(file);
+        manifest.mark_uploaded(file, Some(staged.content_hash.clone()));
         manifest.save(&state.backup_manifest_path)?;
         uploaded_files += 1;
+    }
+
+    for missing in manifest.missing_files(&inventory.files) {
+        let destination = manifest.relocated_to(&missing, &inventory.files);
+        let (event_type, details) = match destination.as_ref() {
+            Some(path) => (
+                "FILE_MOVED",
+                serde_json::json!({ "destination": path }).to_string(),
+            ),
+            None => ("FILE_DELETED", "{}".to_owned()),
+        };
+        if client
+            .security_event(
+                &device_id,
+                event_type,
+                &missing.path.to_string_lossy(),
+                &details,
+            )
+            .await
+            .is_err()
+        {
+            failed_files += 1;
+            break;
+        }
+        manifest.remove(&missing.path);
+        manifest.save(&state.backup_manifest_path)?;
     }
 
     Ok(IncrementalBackupResult {

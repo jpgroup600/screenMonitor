@@ -8,6 +8,16 @@ namespace ScreenshotMonitor.Tests;
 
 public class SecurityEventServiceTests
 {
+    [Theory]
+    [InlineData("FILE_DELETED")]
+    [InlineData("FILE_MOVED")]
+    public async Task Records_file_lifecycle_events(string eventType)
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new SecurityEventService(db, TimeProvider.System);
+        var entry = await service.RecordAsync("employee-1", "device-1", eventType, @"C:\Work\file.txt", "{}");
+        Assert.Equal(eventType, entry.EventType);
+    }
     [Fact]
     public async Task Records_usb_connection_with_warning_severity()
     {

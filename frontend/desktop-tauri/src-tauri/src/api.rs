@@ -21,6 +21,15 @@ struct IdleEvent<'a> {
     event: &'a str,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SecurityEvent<'a> {
+    device_id: &'a str,
+    event_type: &'a str,
+    source: &'a str,
+    details: &'a str,
+}
+
 impl ApiClient {
     pub fn new(base_url: String, token: String) -> Self {
         Self {
@@ -120,6 +129,30 @@ impl ApiClient {
             .map_err(|e| e.to_string())?;
         Ok(())
     }
+
+    pub async fn security_event(
+        &self,
+        device_id: &str,
+        event_type: &str,
+        source: &str,
+        details: &str,
+    ) -> Result<(), String> {
+        self.client
+            .post(format!("{}/security-events", self.base_url))
+            .bearer_auth(&self.token)
+            .json(&SecurityEvent {
+                device_id,
+                event_type,
+                source,
+                details,
+            })
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -184,6 +217,26 @@ mod tests {
                 9,
                 1,
                 &path,
+            )
+            .await
+            .unwrap();
+        mock.assert();
+    }
+
+    #[tokio::test]
+    async fn records_authenticated_file_move_event() {
+        let server = MockServer::start();
+        let mock = server.mock(|when, then| {
+            when.method(POST).path("/api/security-events").header("authorization", "Bearer test-token")
+                .json_body_obj(&serde_json::json!({"deviceId":"device-1","eventType":"FILE_MOVED","source":"C:\\old.txt","details":"{\"destination\":\"D:\\\\new.txt\"}"}));
+            then.status(200);
+        });
+        ApiClient::new(format!("{}/api", server.base_url()), "test-token".into())
+            .security_event(
+                "device-1",
+                "FILE_MOVED",
+                r"C:\old.txt",
+                r#"{"destination":"D:\\new.txt"}"#,
             )
             .await
             .unwrap();
