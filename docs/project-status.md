@@ -154,3 +154,4 @@
 - 차단 장치는 heartbeat HTTP 403을 받고 네이티브 모니터링 중지
 - 장치 등록·갱신·차단 .NET 테스트 및 영구 DeviceId JavaScript 테스트 추가
 - 다음 작업: 관리자 장치 목록 화면 및 차단/해제 버튼 연결
+- Railway 배포 `c7b2b270-3325-4b55-a400-33e513a9b58c` 성공, 운영 heartbeat HTTP 200 확인
