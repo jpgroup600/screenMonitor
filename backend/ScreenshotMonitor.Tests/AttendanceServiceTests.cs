@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using ScreenshotMonitor.Data.Context;
 using ScreenshotMonitor.Data.Services;
+using ScreenshotMonitor.Data.Entities;
 using Xunit;
 
 namespace ScreenshotMonitor.Tests;
@@ -50,6 +51,54 @@ public class AttendanceServiceTests
 
         await Assert.ThrowsAsync<ArgumentException>(() =>
             service.RecordIdleAsync("employee-1", "unknown"));
+    }
+
+    [Fact]
+    public async Task Admin_report_filters_dates_and_calculates_summary()
+    {
+        await using var db = CreateDb();
+        var employee = new User
+        {
+            Id = "employee-1",
+            FullName = "Kim Employee",
+            Email = "kim@example.com",
+            PasswordHash = "hash",
+            Role = "Employee",
+            Designation = "Engineer",
+            PhoneNumber = ""
+        };
+        db.Users.Add(employee);
+        db.AttendanceRecords.AddRange(
+            new AttendanceRecord
+            {
+                EmployeeId = employee.Id,
+                Employee = employee,
+                ClockInAt = new DateTime(2026, 8, 29, 0, 0, 0, DateTimeKind.Utc),
+                ClockOutAt = new DateTime(2026, 8, 29, 8, 0, 0, DateTimeKind.Utc),
+                TotalIdleDuration = TimeSpan.FromHours(1),
+                Status = "Complete"
+            },
+            new AttendanceRecord
+            {
+                EmployeeId = employee.Id,
+                Employee = employee,
+                ClockInAt = new DateTime(2026, 8, 28, 0, 0, 0, DateTimeKind.Utc),
+                ClockOutAt = new DateTime(2026, 8, 28, 8, 0, 0, DateTimeKind.Utc),
+                Status = "Complete"
+            });
+        await db.SaveChangesAsync();
+        var service = new AttendanceService(db, new FakeTimeProvider(DateTimeOffset.UtcNow));
+
+        var report = await service.AdminReportAsync(
+            new DateTime(2026, 8, 29, 0, 0, 0, DateTimeKind.Utc),
+            new DateTime(2026, 8, 30, 0, 0, 0, DateTimeKind.Utc),
+            null,
+            null);
+
+        Assert.Single(report.Records);
+        Assert.Equal(TimeSpan.FromHours(8), report.Summary.TotalWorkDuration);
+        Assert.Equal(TimeSpan.FromHours(1), report.Summary.TotalIdleDuration);
+        Assert.Equal(TimeSpan.FromHours(7), report.Records[0].ProductiveDuration);
     }
 
     private static SmDbContext CreateDb()

@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using ScreenshotMonitor.Data.Context;
 using ScreenshotMonitor.Data.Entities;
+using ScreenshotMonitor.Data.Dto.Attendance;
 
 namespace ScreenshotMonitor.Data.Services;
 
@@ -77,6 +78,46 @@ public class AttendanceService(SmDbContext dbContext, TimeProvider timeProvider)
             .OrderByDescending(x => x.ClockInAt)
             .Take(Math.Clamp(take, 1, 100))
             .ToListAsync();
+
+    public async Task<AdminAttendanceResponseDto> AdminReportAsync(
+        DateTime? from,
+        DateTime? to,
+        string? employeeId,
+        string? status)
+    {
+        var query = dbContext.AttendanceRecords.AsNoTracking().Include(x => x.Employee).AsQueryable();
+        if (from.HasValue) query = query.Where(x => x.ClockInAt >= from.Value.ToUniversalTime());
+        if (to.HasValue) query = query.Where(x => x.ClockInAt < to.Value.ToUniversalTime());
+        if (!string.IsNullOrWhiteSpace(employeeId)) query = query.Where(x => x.EmployeeId == employeeId);
+        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status);
+
+        var records = await query.OrderByDescending(x => x.ClockInAt).ToListAsync();
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var rows = records.Select(x =>
+        {
+            var work = (x.ClockOutAt ?? now) - x.ClockInAt;
+            var productive = work > x.TotalIdleDuration ? work - x.TotalIdleDuration : TimeSpan.Zero;
+            return new AdminAttendanceRowDto(
+                x.Id,
+                x.EmployeeId,
+                x.Employee.FullName,
+                x.Employee.Email,
+                x.ClockInAt,
+                x.ClockOutAt,
+                work,
+                x.TotalIdleDuration,
+                productive,
+                x.Status);
+        }).ToList();
+
+        var summary = new AdminAttendanceSummaryDto(
+            rows.Count,
+            rows.Count(x => x.Status == "Active"),
+            rows.Count(x => x.Status == "Complete"),
+            TimeSpan.FromTicks(rows.Sum(x => x.WorkDuration.Ticks)),
+            TimeSpan.FromTicks(rows.Sum(x => x.TotalIdleDuration.Ticks)));
+        return new AdminAttendanceResponseDto(summary, rows);
+    }
 
     private Task<AttendanceRecord?> ActiveWithIdlePeriods(string employeeId) =>
         dbContext.AttendanceRecords.Include(x => x.IdlePeriods).FirstOrDefaultAsync(x =>

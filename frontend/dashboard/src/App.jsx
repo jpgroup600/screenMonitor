@@ -11,6 +11,7 @@ import { OnlineUsersProvider } from "./Contexts/OnlineUsersContext";
 import Sessions from "./Screens/Sessions/Sessions";
 import SessionDetails from './Screens/Sessions/SessionDetails';
 import EmployeeProfile from './Screens/User/EmployeeProfile';
+import Attendance from './Screens/Attendance';
 
 function App() {
   const token = localStorage.getItem("token");
@@ -38,6 +39,7 @@ function App() {
             <Route path="/projects" element={<Projects />} />
             <Route path="/projects/:projectId" element={<ProjectDetails />} />
             <Route path="/users" element={<Users />} />
+            <Route path="/attendance" element={<Attendance />} />
             <Route path="/sessions/:employeeId/:projectId" element={<Sessions />} />
             <Route 
               path="/employees/:employeeId/projects/:projectId/sessions/:sessionId" 

@@ -58,6 +58,22 @@ public class AttendanceController(AttendanceService attendanceService) : Control
         return Ok(records.Select(ToResponse));
     }
 
+    [Authorize(Roles = "Admin")]
+    [HttpGet("admin")]
+    public async Task<ActionResult<AdminAttendanceResponseDto>> AdminReport(
+        [FromQuery] DateTime? from = null,
+        [FromQuery] DateTime? to = null,
+        [FromQuery] string? employeeId = null,
+        [FromQuery] string? status = null)
+    {
+        if (from.HasValue && to.HasValue && from >= to)
+            return BadRequest(new { message = "from must be earlier than to." });
+        if (!string.IsNullOrWhiteSpace(status) && status is not ("Active" or "Complete"))
+            return BadRequest(new { message = "status must be Active or Complete." });
+
+        return Ok(await attendanceService.AdminReportAsync(from, to, employeeId, status));
+    }
+
     private static AttendanceResponseDto ToResponse(AttendanceRecord record) => new(
         record.Id, record.ClockInAt, record.ClockOutAt, record.TotalIdleDuration, record.Status);
 
