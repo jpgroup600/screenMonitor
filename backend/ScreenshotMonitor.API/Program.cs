@@ -10,7 +10,6 @@ using Microsoft.OpenApi.Models;
 using System.Text.Json.Serialization;
 using ScreenshotMonitor.Data.Interfaces;
 using ScreenshotMonitor.SignalR;
-using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.Extensions.FileProviders;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -119,11 +118,6 @@ var app = builder.Build();
 var storagePath = builder.Configuration["FileStorage:UploadPath"] ?? "/app/Uploads";
 Directory.CreateDirectory(storagePath); // Ensure the folder exists
 
-app.UseForwardedHeaders(new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
-
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(storagePath),
@@ -174,7 +168,6 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
 app.MapHub<UserActivityHub>("/useractivityhub");
 app.MapHub<ScreenHub>("/screenHub");
 app.MapControllers();
