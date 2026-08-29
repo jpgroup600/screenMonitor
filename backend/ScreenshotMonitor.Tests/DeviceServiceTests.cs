@@ -31,6 +31,16 @@ public class DeviceServiceTests
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.HeartbeatAsync("employee-1", "device-1", "PC", "Windows"));
     }
 
+    [Fact]
+    public async Task Heartbeat_accepts_a_full_browser_user_agent()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new DeviceService(db, TimeProvider.System);
+        var userAgent = new string('a', 400);
+        var device = await service.HeartbeatAsync("employee-1", "device-1", "Windows", userAgent);
+        Assert.Equal(userAgent, device.OperatingSystem);
+    }
+
     private static User Employee() => new() { Id = "employee-1", FullName = "Employee", Email = "e@example.com", PasswordHash = "hash", Role = "Employee", Designation = "", PhoneNumber = "" };
     private static SmDbContext CreateDb() => new(new DbContextOptionsBuilder<SmDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
     private sealed class FakeTimeProvider(DateTimeOffset now) : TimeProvider { private DateTimeOffset current = now; public override DateTimeOffset GetUtcNow() => current; public void Advance(TimeSpan value) => current += value; }
