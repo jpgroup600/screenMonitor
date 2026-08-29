@@ -29,7 +29,7 @@
 ### 백엔드와 데이터베이스
 
 - Railway .NET API와 PostgreSQL 운영 배포
-- 출근 통합 API Railway 배포 성공 (`bbc98f71-d342-457b-9682-eb82cf7f4c17`)
+- 출근 통합 및 기본 캡처 간격 수정 API Railway 배포 성공 (`9e32d66a-15b3-46f4-a641-bd2a24dc7a44`)
 - 출근, 퇴근, 현재 상태, 개인 이력 API
 - 관리자 출퇴근 보고서 API
 - `AttendanceRecords`, `AttendanceIdlePeriods`
