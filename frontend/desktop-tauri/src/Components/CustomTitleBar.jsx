@@ -5,7 +5,7 @@ import { native } from "../native";
 export default function CustomTitleBar() {
   const handleMinimize = () => native.minimize();
   const handleMaximize = () => native.maximize();
-  const handleClose = () => native.close();
+  const handleClose = () => native.close().catch(console.error);
 
   return (
     <div className="absolute flex justify-between items-center bg-[#020617] text-white h-6 w-screen pl-4 select-none">
