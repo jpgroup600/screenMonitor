@@ -1,5 +1,17 @@
 # Screen Monitor 작업 현황
 
+## 2026-08-30 Railway Storage Bucket 연동
+
+- production Asia Pacific 지역에 `employee-backups` 비공개 Bucket 생성
+- API 서비스에 Bucket 자격증명을 Railway 참조 변수로 연결해 비밀키를 코드·Git에 저장하지 않음
+- `BackupFiles`, `FileVersions` 테이블과 EF 마이그레이션 추가
+- 직원·장치·원래 경로별 파일 기록과 SHA-256 기반 버전·객체 키 관리
+- 동일 직원의 동일 내용은 Bucket 객체를 중복 업로드하지 않고 경로별 이력은 각각 보존
+- 암호화 컨테이너만 받는 `POST /api/backups/upload` API 추가
+- Bucket 업로드 성공 후에만 DB를 확정하며 DB 실패 시 새 객체를 정리
+- 백업 서비스 테스트 포함 .NET 테스트 18개 통과 및 API 빌드 통과
+- 다음 작업: Tauri 암호화 스테이징 파일의 SHA-256 계산·업로드 연결과 자동 증분 스케줄러
+
 ## 2026-08-30 파일 백업 기반 1차 구현
 
 - 전체 드라이브 파일 인벤토리를 위한 Rust 읽기 전용 스캐너 추가

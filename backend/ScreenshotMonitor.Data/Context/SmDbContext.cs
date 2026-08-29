@@ -93,6 +93,14 @@ namespace ScreenshotMonitor.Data.Context
 
             modelBuilder.Entity<SecurityEvent>()
                 .HasOne(e => e.Employee).WithMany().HasForeignKey(e => e.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<BackupFile>()
+                .HasOne(f => f.Employee).WithMany().HasForeignKey(f => f.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<BackupFile>()
+                .HasIndex(f => new { f.EmployeeId, f.DeviceId, f.OriginalPath }).IsUnique();
+            modelBuilder.Entity<FileVersion>()
+                .HasOne(v => v.BackupFile).WithMany(f => f.Versions).HasForeignKey(v => v.BackupFileId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<FileVersion>().HasIndex(v => v.ContentHash);
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -129,5 +137,7 @@ namespace ScreenshotMonitor.Data.Context
         public DbSet<AttendanceIdlePeriod> AttendanceIdlePeriods { get; set; }
         public DbSet<Device> Devices { get; set; }
         public DbSet<SecurityEvent> SecurityEvents { get; set; }
+        public DbSet<BackupFile> BackupFiles { get; set; }
+        public DbSet<FileVersion> FileVersions { get; set; }
     }
 }

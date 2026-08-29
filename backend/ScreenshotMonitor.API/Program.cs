@@ -12,6 +12,7 @@ using ScreenshotMonitor.Data.Interfaces;
 using ScreenshotMonitor.SignalR;
 using Microsoft.Extensions.FileProviders;
 using ScreenshotMonitor.Data.Services;
+using ScreenshotMonitor.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,6 +43,8 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<DeviceService>();
 builder.Services.AddScoped<SecurityEventService>();
+builder.Services.AddScoped<BackupService>();
+builder.Services.AddSingleton<IBackupObjectStorage, RailwayBucketStorage>();
 
 
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
