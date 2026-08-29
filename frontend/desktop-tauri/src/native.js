@@ -12,5 +12,6 @@ export const native = {
   startAttendanceMonitoring: (token) => invoke('start_attendance_monitoring', { token }),
   stopMonitoring: () => invoke('stop_monitoring'),
   captureScreenshot: () => invoke('capture_screenshot'),
-  showAttendanceReminder: () => invoke('show_attendance_reminder')
+  startAttendanceReminders: () => invoke('start_attendance_reminders'),
+  stopAttendanceReminders: () => invoke('stop_attendance_reminders')
 };

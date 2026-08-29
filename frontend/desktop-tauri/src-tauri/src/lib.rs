@@ -4,16 +4,34 @@ mod monitor;
 mod platform;
 
 use monitor::MonitorSession;
-use std::{sync::Mutex, time::Duration};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+    time::Duration,
+};
 use tauri::{Manager, State};
 use tauri_plugin_notification::NotificationExt;
 
 const BACKEND_URL: &str = "https://api-production-18d6.up.railway.app/api";
+const ATTENDANCE_REMINDER_INTERVAL: Duration = Duration::from_secs(10 * 60);
 
 #[derive(Default)]
 struct AppState {
     session: Mutex<Option<MonitorSession>>,
+    reminder: Mutex<Option<ReminderSession>>,
     token: Mutex<Option<String>>,
+}
+
+struct ReminderSession {
+    running: Arc<AtomicBool>,
+}
+
+impl ReminderSession {
+    fn stop(&self) {
+        self.running.store(false, Ordering::SeqCst);
+    }
 }
 
 #[tauri::command]
@@ -70,13 +88,56 @@ async fn capture_screenshot(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn show_attendance_reminder(app: tauri::AppHandle) -> Result<(), String> {
-    app.notification()
-        .builder()
-        .title("출퇴근 관리 프로그램")
-        .body("출근 기록이 없습니다. 출근 버튼을 눌러주세요.")
-        .show()
-        .map_err(|error| error.to_string())
+fn start_attendance_reminders(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let mut reminder = state.reminder.lock().map_err(|error| error.to_string())?;
+    if let Some(existing) = reminder.take() {
+        existing.stop();
+    }
+
+    let running = Arc::new(AtomicBool::new(true));
+    let task_running = running.clone();
+    tauri::async_runtime::spawn(async move {
+        while task_running.load(Ordering::SeqCst) {
+            tokio::time::sleep(ATTENDANCE_REMINDER_INTERVAL).await;
+            if !task_running.load(Ordering::SeqCst) {
+                break;
+            }
+            let _ = app
+                .notification()
+                .builder()
+                .title("출퇴근 관리 프로그램")
+                .body("출근 기록이 없습니다. 출근 버튼을 눌러주세요.")
+                .show();
+        }
+    });
+    *reminder = Some(ReminderSession { running });
+    Ok(())
+}
+
+#[cfg(test)]
+mod reminder_tests {
+    use super::*;
+
+    #[test]
+    fn attendance_reminder_interval_is_ten_minutes() {
+        assert_eq!(ATTENDANCE_REMINDER_INTERVAL, Duration::from_secs(600));
+    }
+}
+
+#[tauri::command]
+fn stop_attendance_reminders(state: State<'_, AppState>) -> Result<(), String> {
+    if let Some(reminder) = state
+        .reminder
+        .lock()
+        .map_err(|error| error.to_string())?
+        .take()
+    {
+        reminder.stop();
+    }
+    Ok(())
 }
 
 pub fn run() {
@@ -89,7 +150,8 @@ pub fn run() {
             start_attendance_monitoring,
             stop_monitoring,
             capture_screenshot,
-            show_attendance_reminder
+            start_attendance_reminders,
+            stop_attendance_reminders
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

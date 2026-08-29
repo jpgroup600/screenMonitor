@@ -4,7 +4,6 @@ import { useNavigate } from "react-router-dom";
 import request from "../Actions/request";
 import { native } from "../native";
 import ProjectCard from "../Components/ProjectCard";
-import { startAttendanceReminder } from "../attendanceReminder";
 
 const Dashboard = () => {
   const [attendance, setAttendance] = useState(null);
@@ -49,7 +48,8 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!attendanceLoaded || attendance) return undefined;
-    return startAttendanceReminder(() => native.showAttendanceReminder());
+    native.startAttendanceReminders().catch(console.error);
+    return () => native.stopAttendanceReminders().catch(console.error);
   }, [attendanceLoaded, attendance]);
 
   const clockIn = async () => {
