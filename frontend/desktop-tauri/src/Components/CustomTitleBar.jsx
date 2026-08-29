@@ -10,7 +10,7 @@ export default function CustomTitleBar() {
   return (
     <div className="absolute flex justify-between items-center bg-[#020617] text-white h-6 w-screen pl-4 select-none">
       {/* Draggable Area */}
-      <div className="text-gray-400 flex-1 drag" data-tauri-drag-region>Employee Tracker</div>
+      <div className="text-gray-400 flex-1 drag" data-tauri-drag-region>출퇴근 관리 프로그램</div>
       
       {/* Buttons */}
       <div className="flex">
