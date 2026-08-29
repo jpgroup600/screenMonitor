@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using ScreenshotMonitor.Data.Dto.Backup;
+using ScreenshotMonitor.Data.Dto;
 using ScreenshotMonitor.Data.Services;
 
 namespace ScreenshotMonitor.API.Controllers;
