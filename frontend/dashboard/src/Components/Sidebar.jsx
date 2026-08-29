@@ -8,7 +8,8 @@ import {
   FiLogOut,
   FiX,
   FiMenu,
-  FiClock
+  FiClock,
+  FiMonitor
 } from 'react-icons/fi';
 import LogoutPopup from './LogoutPopup';
 
@@ -21,6 +22,7 @@ export default function Sidebar({ isSidebarOpen, setIsSidebarOpen }) {
     { title: 'Projects', icon: <FiFolder />, link: '/projects' },
     { title: 'Users', icon: <FiUsers />, link: '/users' },
     { title: 'Attendance', icon: <FiClock />, link: '/attendance' },
+    { title: 'Devices', icon: <FiMonitor />, link: '/devices' },
   ];
 
   useEffect(() => {
