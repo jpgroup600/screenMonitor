@@ -1,8 +1,6 @@
 export async function restoreAttendanceMonitoring({ request, native, token }) {
   const current = await request.get("/attendance/current");
-  if (!current) return null;
-
-  await request.post("/attendance/resume-monitoring", {});
+  await request.post("/session/monitoring/ensure", {});
   await native.startAttendanceMonitoring(token);
-  return current;
+  return current || null;
 }

@@ -21,9 +21,7 @@ public class AttendanceServiceTests
 
         Assert.Equal(first.Id, second.Id);
         Assert.Single(db.AttendanceRecords);
-        var session = Assert.Single(db.Sessions);
-        Assert.Null(session.ProjectId);
-        Assert.Equal("Active", session.Status);
+        Assert.Empty(db.Sessions);
     }
 
     [Fact]
@@ -43,17 +41,16 @@ public class AttendanceServiceTests
         Assert.Equal(TimeSpan.FromMinutes(7), completed.TotalIdleDuration);
         Assert.Equal("Complete", completed.Status);
         Assert.Single(db.AttendanceIdlePeriods);
-        Assert.Equal("Complete", Assert.Single(db.Sessions).Status);
+        Assert.Empty(db.Sessions);
     }
 
     [Fact]
-    public async Task Clock_out_completes_the_active_project_session_and_apps()
+    public async Task Clock_out_does_not_stop_the_independent_monitoring_session()
     {
         await using var db = CreateDb();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 29, 0, 0, 0, TimeSpan.Zero));
         var service = new AttendanceService(db, clock);
         await service.ClockInAsync("employee-1");
-        db.Sessions.RemoveRange(db.Sessions);
         var projectSession = new Session
         {
             EmployeeId = "employee-1",
@@ -74,15 +71,15 @@ public class AttendanceServiceTests
         clock.Advance(TimeSpan.FromHours(1));
         await service.ClockOutAsync("employee-1");
 
-        Assert.Equal("Complete", projectSession.Status);
-        Assert.Equal(TimeSpan.FromHours(1), projectSession.ActiveDuration);
+        Assert.Equal("Active", projectSession.Status);
+        Assert.Equal(TimeSpan.Zero, projectSession.ActiveDuration);
         var app = Assert.Single(db.SessionForegroundApps);
-        Assert.Equal("Inactive", app.Status);
-        Assert.Equal(TimeSpan.FromHours(1), app.TotalUsageTime);
+        Assert.Equal("Active", app.Status);
+        Assert.Equal(TimeSpan.Zero, app.TotalUsageTime);
     }
 
     [Fact]
-    public async Task Resume_monitoring_creates_a_generic_session_only_during_attendance()
+    public async Task Legacy_attendance_resume_only_reports_active_attendance()
     {
         await using var db = CreateDb();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 29, 0, 0, 0, TimeSpan.Zero));
@@ -90,15 +87,8 @@ public class AttendanceServiceTests
 
         Assert.False(await service.ResumeMonitoringAsync("employee-1"));
         await service.ClockInAsync("employee-1");
-        var firstSession = Assert.Single(db.Sessions);
-        firstSession.Status = "Complete";
-        firstSession.EndTime = clock.GetUtcNow().UtcDateTime;
-        await db.SaveChangesAsync();
-
         Assert.True(await service.ResumeMonitoringAsync("employee-1"));
-        Assert.Equal(2, await db.Sessions.CountAsync());
-        var active = await db.Sessions.SingleAsync(x => x.Status == "Active");
-        Assert.Null(active.ProjectId);
+        Assert.Empty(db.Sessions);
     }
 
     [Fact]

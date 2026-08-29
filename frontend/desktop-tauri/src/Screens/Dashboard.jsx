@@ -57,7 +57,6 @@ const Dashboard = () => {
     try {
       setBusy(true);
       setAttendance(await request.post("/attendance/clock-in", {}));
-      await native.startAttendanceMonitoring(localStorage.getItem("token"));
     } catch (err) {
       console.error(err);
       alert("출근 처리를 완료하지 못했습니다.");
@@ -70,7 +69,6 @@ const Dashboard = () => {
     try {
       setBusy(true);
       await request.post("/attendance/clock-out", {});
-      await native.stopMonitoring();
       setAttendance(null);
     } catch (err) {
       console.error(err);
@@ -82,6 +80,7 @@ const Dashboard = () => {
 
   const logout = async () => {
     if (attendance) await request.post("/attendance/clock-out", {}).catch(console.error);
+    await request.post("/session/monitoring/end", {}).catch(console.error);
     await native.stopMonitoring().catch(console.error);
     localStorage.removeItem("userId");
     localStorage.removeItem("token");

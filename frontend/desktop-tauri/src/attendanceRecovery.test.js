@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { restoreAttendanceMonitoring } from "./attendanceRecovery";
 
 describe("restoreAttendanceMonitoring", () => {
-  it("restores the server session and native monitor for active attendance", async () => {
+  it("restores the server session and native monitor independently of attendance", async () => {
     const attendance = { id: "attendance-1", status: "Active" };
     const request = {
       get: vi.fn().mockResolvedValue(attendance),
@@ -12,11 +12,11 @@ describe("restoreAttendanceMonitoring", () => {
 
     await expect(restoreAttendanceMonitoring({ request, native, token: "token-1" }))
       .resolves.toBe(attendance);
-    expect(request.post).toHaveBeenCalledWith("/attendance/resume-monitoring", {});
+    expect(request.post).toHaveBeenCalledWith("/session/monitoring/ensure", {});
     expect(native.startAttendanceMonitoring).toHaveBeenCalledWith("token-1");
   });
 
-  it("does not start monitoring before clock-in", async () => {
+  it("starts monitoring before clock-in when the employee is logged in", async () => {
     const request = {
       get: vi.fn().mockResolvedValue(null),
       post: vi.fn(),
@@ -25,7 +25,7 @@ describe("restoreAttendanceMonitoring", () => {
 
     await expect(restoreAttendanceMonitoring({ request, native, token: "token-1" }))
       .resolves.toBeNull();
-    expect(request.post).not.toHaveBeenCalled();
-    expect(native.startAttendanceMonitoring).not.toHaveBeenCalled();
+    expect(request.post).toHaveBeenCalledWith("/session/monitoring/ensure", {});
+    expect(native.startAttendanceMonitoring).toHaveBeenCalledWith("token-1");
   });
 });

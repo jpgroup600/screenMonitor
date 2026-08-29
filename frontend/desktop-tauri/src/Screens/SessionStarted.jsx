@@ -15,7 +15,7 @@ const SessionStarted = () => {
       const endpoint = `/session/end`;
       const response = await request.post(endpoint, { projectId: String(projectId) });
       console.log("Session end response:", response);
-      await request.post("/attendance/resume-monitoring", {});
+      await request.post("/session/monitoring/ensure", {});
       await native.stopMonitoring();
       await native.startAttendanceMonitoring(localStorage.getItem("token"));
       navigate("/");
@@ -28,7 +28,6 @@ const SessionStarted = () => {
   const handleClockOut = async () => {
     try {
       await request.post("/attendance/clock-out", {});
-      await native.stopMonitoring();
       navigate("/");
     } catch (error) {
       console.error("Failed to clock out:", error);

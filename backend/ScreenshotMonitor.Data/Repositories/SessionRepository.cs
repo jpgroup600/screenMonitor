@@ -257,6 +257,52 @@ public class SessionRepository(
             .OrderByDescending(session => session.StartTime)
             .ToListAsync();
 
+    public async Task<Session> EnsureMonitoringSessionAsync(string employeeId)
+    {
+        var existing = await _dbContext.Sessions
+            .Where(session => session.EmployeeId == employeeId && session.Status == "Active")
+            .OrderByDescending(session => session.StartTime)
+            .FirstOrDefaultAsync();
+        if (existing is not null) return existing;
+
+        var session = new Session
+        {
+            EmployeeId = employeeId,
+            ProjectId = null,
+            StartTime = DateTime.UtcNow,
+            ActiveDuration = TimeSpan.Zero,
+            Status = "Active"
+        };
+        _dbContext.Sessions.Add(session);
+        await _dbContext.SaveChangesAsync();
+        return session;
+    }
+
+    public async Task<bool> EndMonitoringSessionsAsync(string employeeId)
+    {
+        var sessions = await _dbContext.Sessions
+            .Include(session => session.ForegroundApps)
+            .Where(session => session.EmployeeId == employeeId && session.Status == "Active")
+            .ToListAsync();
+        if (sessions.Count == 0) return false;
+
+        var now = DateTime.UtcNow;
+        foreach (var session in sessions)
+        {
+            foreach (var app in session.ForegroundApps.Where(app => app.Status == "Active"))
+            {
+                app.EndTime = now;
+                app.TotalUsageTime = now - app.StartTime;
+                app.Status = "Inactive";
+            }
+            session.EndTime = now;
+            session.ActiveDuration = now - session.StartTime;
+            session.Status = "Complete";
+        }
+        await _dbContext.SaveChangesAsync();
+        return true;
+    }
+
 
     public async Task<bool> DeleteSessionsAsync(string employeeId, string projectId)
     {

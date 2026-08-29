@@ -74,6 +74,22 @@ public class SessionController(
         }));
     }
 
+    [Authorize(Roles = "Employee,Admin")]
+    [HttpPost("monitoring/ensure")]
+    public async Task<ActionResult<SessionResponseDto>> EnsureMonitoringSession()
+    {
+        var session = await _sessionRepo.EnsureMonitoringSessionAsync(GetEmployeeIdFromClaims());
+        return Ok(ToResponse(session));
+    }
+
+    [Authorize(Roles = "Employee,Admin")]
+    [HttpPost("monitoring/end")]
+    public async Task<IActionResult> EndMonitoringSessions()
+    {
+        await _sessionRepo.EndMonitoringSessionsAsync(GetEmployeeIdFromClaims());
+        return NoContent();
+    }
+
     /// <summary>
     /// Start a new session for an employee in a project.
     /// </summary>
@@ -109,6 +125,17 @@ public class SessionController(
             return StatusCode(500, "An error occurred while starting the session.");
         }
     }
+
+    private static SessionResponseDto ToResponse(ScreenshotMonitor.Data.Entities.Session session) => new()
+    {
+        SessionId = session.Id,
+        EmployeeId = session.EmployeeId,
+        ProjectId = session.ProjectId,
+        StartTime = session.StartTime,
+        EndTime = session.EndTime,
+        ActiveDuration = session.EndTime.HasValue ? session.EndTime.Value - session.StartTime : TimeSpan.Zero,
+        Status = session.Status
+    };
 
     /// <summary>
     /// End an active session for an employee in a project.
