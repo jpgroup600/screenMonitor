@@ -1,0 +1,17 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Screen Monitor",
+  "version": "2.0.0",
+  "identifier": "com.screenmonitor.desktop",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [{ "label": "main", "title": "Screen Monitor", "width": 900, "height": 650, "decorations": false, "center": true }],
+    "security": { "csp": null }
+  },
+  "bundle": { "active": true, "targets": "nsis", "icon": [] }
+}
