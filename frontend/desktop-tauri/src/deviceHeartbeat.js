@@ -16,3 +16,8 @@ export async function sendDeviceHeartbeat({ request, storage, createId = () => c
     operatingSystem: navigator.userAgent,
   });
 }
+
+export async function restoreAuthorizedMonitoring({ heartbeat, restore }) {
+  await heartbeat();
+  return restore();
+}

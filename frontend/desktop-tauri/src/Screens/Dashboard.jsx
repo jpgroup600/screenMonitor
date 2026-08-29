@@ -5,7 +5,7 @@ import request from "../Actions/request";
 import { native } from "../native";
 import ProjectCard from "../Components/ProjectCard";
 import { restoreAttendanceMonitoring } from "../attendanceRecovery";
-import { sendDeviceHeartbeat } from "../deviceHeartbeat";
+import { restoreAuthorizedMonitoring, sendDeviceHeartbeat } from "../deviceHeartbeat";
 
 const Dashboard = () => {
   const [attendance, setAttendance] = useState(null);
@@ -17,11 +17,17 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const heartbeat = () => sendDeviceHeartbeat({ request, storage: localStorage }).catch((error) => {
-      console.error("Device heartbeat failed:", error);
-      if (error?.response?.status === 403) native.stopMonitoring().catch(console.error);
-    });
-    heartbeat();
+    const heartbeat = async () => {
+      try {
+        await sendDeviceHeartbeat({ request, storage: localStorage });
+      } catch (error) {
+        console.error("Device heartbeat failed:", error);
+        if (error?.response?.status === 403) {
+          await request.post("/session/monitoring/end", {}).catch(console.error);
+          await native.stopMonitoring().catch(console.error);
+        }
+      }
+    };
     const timer = window.setInterval(heartbeat, 60_000);
     return () => window.clearInterval(timer);
   }, []);
@@ -43,14 +49,21 @@ const Dashboard = () => {
   useEffect(() => {
     const loadAttendance = async () => {
       try {
-        const current = await restoreAttendanceMonitoring({
-          request,
-          native,
-          token: localStorage.getItem("token"),
+        const current = await restoreAuthorizedMonitoring({
+          heartbeat: () => sendDeviceHeartbeat({ request, storage: localStorage }),
+          restore: () => restoreAttendanceMonitoring({
+            request,
+            native,
+            token: localStorage.getItem("token"),
+          }),
         });
         setAttendance(current || null);
       } catch (err) {
         console.error("Failed to load attendance:", err);
+        if (err?.response?.status === 403) {
+          await request.post("/session/monitoring/end", {}).catch(console.error);
+          await native.stopMonitoring().catch(console.error);
+        }
       } finally {
         setAttendanceLoaded(true);
       }
