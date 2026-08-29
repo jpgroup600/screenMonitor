@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import request from "../Actions/request";
 import { native } from "../native";
 import ProjectCard from "../Components/ProjectCard";
+import { restoreAttendanceMonitoring } from "../attendanceRecovery";
 
 const Dashboard = () => {
   const [attendance, setAttendance] = useState(null);
@@ -31,12 +32,12 @@ const Dashboard = () => {
   useEffect(() => {
     const loadAttendance = async () => {
       try {
-        const current = await request.get("/attendance/current");
+        const current = await restoreAttendanceMonitoring({
+          request,
+          native,
+          token: localStorage.getItem("token"),
+        });
         setAttendance(current || null);
-        if (current) {
-          await request.post("/attendance/resume-monitoring", {});
-          await native.startAttendanceMonitoring(localStorage.getItem("token"));
-        }
       } catch (err) {
         console.error("Failed to load attendance:", err);
       } finally {

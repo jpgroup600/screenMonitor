@@ -46,7 +46,6 @@ const App = () => {
     
         } catch (error) {
           console.error('UserActivityHub connection error:', error);
-          setToken(null);
         }
       }
     };

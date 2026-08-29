@@ -12,6 +12,7 @@ use std::{
     time::Duration,
 };
 use tauri::{Manager, State};
+use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_notification::NotificationExt;
 
 const BACKEND_URL: &str = "https://api-production-18d6.up.railway.app/api";
@@ -142,7 +143,11 @@ fn stop_attendance_reminders(state: State<'_, AppState>) -> Result<(), String> {
 
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_autostart::Builder::new().build())
+        .plugin(
+            tauri_plugin_autostart::Builder::new()
+                .args(["--autostart"])
+                .build(),
+        )
         .plugin(tauri_plugin_notification::init())
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
@@ -164,6 +169,12 @@ pub fn run() {
                 menu::{Menu, MenuItem},
                 tray::TrayIconBuilder,
             };
+            app.autolaunch().enable()?;
+            if core::is_autostart_launch(std::env::args()) {
+                if let Some(window) = app.get_webview_window("main") {
+                    window.hide()?;
+                }
+            }
             let show = MenuItem::with_id(app, "show", "Restore", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&show])?;
             TrayIconBuilder::new()

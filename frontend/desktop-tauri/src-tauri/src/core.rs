@@ -47,6 +47,14 @@ pub fn screenshot_file_name(process_id: u32, monitor_index: usize) -> String {
     format!("screen-monitor-{process_id}-{monitor_index}.png")
 }
 
+pub fn is_autostart_launch<I, S>(args: I) -> bool
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    args.into_iter().any(|arg| arg.as_ref() == "--autostart")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -90,5 +98,11 @@ mod tests {
         assert_eq!(screenshot_file_name(42, 0), "screen-monitor-42-0.png");
         assert_eq!(screenshot_file_name(42, 1), "screen-monitor-42-1.png");
         assert_ne!(screenshot_file_name(42, 0), screenshot_file_name(42, 1));
+    }
+
+    #[test]
+    fn detects_background_autostart_launch() {
+        assert!(is_autostart_launch(["app.exe", "--autostart"]));
+        assert!(!is_autostart_launch(["app.exe"]));
     }
 }
