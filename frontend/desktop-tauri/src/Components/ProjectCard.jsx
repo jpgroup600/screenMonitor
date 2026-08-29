@@ -1,29 +1,24 @@
 import React from "react";
 
-export default function ProjectCard({ project, isSelected, onSelect }) {
+export default function ProjectCard({ project, isSelected = false, onSelect, readOnly = false }) {
     // Date formatting utility
     const formatDate = (dateString) => {
         const options = { year: 'numeric', month: 'short', day: 'numeric' };
-        return new Date(dateString).toLocaleDateString(undefined, options);
+        return dateString ? new Date(dateString).toLocaleDateString(undefined, options) : "일정 미정";
     };
 
     return (
         <div
             className={`flex flex-col rounded-xl shadow-xl overflow-hidden w-72 h-52 transform transition-all duration-300 
-                hover:scale-105 cursor-pointer border-2 ${isSelected ? "border-blue-400" : "border-transparent"}
+                ${readOnly ? "cursor-default" : "hover:scale-105 cursor-pointer"} border-2 ${isSelected ? "border-blue-400" : "border-transparent"}
                 hover:shadow-2xl`}
             style={{
                 backgroundColor: isSelected ? "#0068F7" : "#121222",
             }}
-            onClick={onSelect}
+            onClick={readOnly ? undefined : onSelect}
         >
             {/* Hidden Radio Button */}
-            <input
-                type="radio"
-                checked={isSelected}
-                onChange={onSelect}
-                className="hidden"
-            />
+            {!readOnly && <input type="radio" checked={isSelected} onChange={onSelect} className="hidden" />}
 
             <div className="p-4 flex-1 flex flex-col gap-2">
                 {/* Title Section */}
@@ -85,7 +80,7 @@ export default function ProjectCard({ project, isSelected, onSelect }) {
                             color: isSelected ? "#FFFFFF" : "#9CA3AF",
                         }}
                     >
-                        {project.status.toLowerCase()}
+                        {(project.status || "Unknown").toLowerCase()}
                     </span>
                 </div>
             </div>

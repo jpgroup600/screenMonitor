@@ -3,9 +3,12 @@ import { FaClock, FaPlay, FaSignOutAlt, FaStop, FaTachometerAlt } from "react-ic
 import { useNavigate } from "react-router-dom";
 import request from "../Actions/request";
 import { native } from "../native";
+import ProjectCard from "../Components/ProjectCard";
 
 const Dashboard = () => {
   const [attendance, setAttendance] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [projectsLoading, setProjectsLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const navigate = useNavigate();
@@ -13,6 +16,15 @@ const Dashboard = () => {
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const userId = localStorage.getItem("userId");
+    if (!userId) return;
+    request.get(`/project/employee/${userId}/project`)
+      .then((items) => setProjects(items || []))
+      .catch((err) => console.error("Failed to load assigned projects:", err))
+      .finally(() => setProjectsLoading(false));
   }, []);
 
   useEffect(() => {
@@ -124,6 +136,24 @@ const Dashboard = () => {
               </button>
             )}
           </div>
+        </section>
+
+        <section className="mt-10">
+          <div className="mb-4">
+            <h2 className="text-2xl font-bold">내 배정 프로젝트</h2>
+            <p className="mt-1 text-sm text-gray-400">배정 현황을 확인하는 용도이며 출퇴근 기록과 모니터링에는 영향을 주지 않습니다.</p>
+          </div>
+          {projectsLoading ? (
+            <p className="text-gray-400">프로젝트를 불러오는 중입니다...</p>
+          ) : projects.length > 0 ? (
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {projects.map((project) => <ProjectCard key={project.id} project={project} readOnly />)}
+            </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-gray-700 p-8 text-center text-gray-400">
+              현재 배정된 프로젝트가 없습니다.
+            </div>
+          )}
         </section>
       </div>
     </div>
