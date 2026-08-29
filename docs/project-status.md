@@ -161,3 +161,4 @@
 - 관리자 온라인 판정 Node 테스트 2개, 대시보드 프로덕션 빌드 통과
 - 앱 시작 시 장치 heartbeat 승인 후에만 모니터링 복구; 차단 응답이면 활성 세션과 네이티브 추적 종료
 - 데스크톱 차단 순서 테스트 포함 JavaScript 테스트 5개 통과
+- 최신 릴리스 실사용 검증: 장치 heartbeat HTTP 200 이후 monitoring ensure HTTP 200 순서 확인
