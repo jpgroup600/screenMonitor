@@ -114,6 +114,8 @@
 - 출근 중복 요청과 재시작 복구 시 서버에서 활성 세션을 재사용하여 중복 세션 방지
 - Windows 로그인 시 자동 실행을 활성화하고 `--autostart` 실행은 창을 숨긴 채 트레이에서 시작
 - JavaScript 복구 테스트 2개, Rust 테스트 7개 통과
+- 릴리스 앱 재실행 실사용 검증: `attendance/current` 200, `attendance/resume-monitoring` 204
+- 복구 직후 듀얼 모니터 스크린샷 업로드 2건 모두 HTTP 200 확인
 
 ### 다음 검증
 
