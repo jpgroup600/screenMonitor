@@ -11,7 +11,7 @@ const activeWin = require('active-win');
 
 // Environment Configuration
 const isProd = process.env.NODE_ENV === 'production' || __dirname.includes('app.asar');
-const envPath = isProd ? path.join(process.resourcesPath, '.env') : path.join(__dirname, '.env');
+const envPath = isProd ? path.join(process.resourcesPath, '.env') : path.join(__dirname, '..', '.env');
 require('dotenv').config({ path: envPath });
 
 if (started) app.quit();
