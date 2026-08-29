@@ -13,5 +13,6 @@ export const native = {
   stopMonitoring: () => invoke('stop_monitoring'),
   captureScreenshot: () => invoke('capture_screenshot'),
   startAttendanceReminders: () => invoke('start_attendance_reminders'),
-  stopAttendanceReminders: () => invoke('stop_attendance_reminders')
+  stopAttendanceReminders: () => invoke('stop_attendance_reminders'),
+  listRemovableDrives: () => invoke('list_removable_drives')
 };

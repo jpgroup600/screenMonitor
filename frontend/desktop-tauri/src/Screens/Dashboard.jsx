@@ -6,6 +6,7 @@ import { native } from "../native";
 import ProjectCard from "../Components/ProjectCard";
 import { restoreAttendanceMonitoring } from "../attendanceRecovery";
 import { restoreAuthorizedMonitoring, sendDeviceHeartbeat } from "../deviceHeartbeat";
+import { diffRemovableDrives, recordUsbChanges } from "../usbAudit";
 
 const Dashboard = () => {
   const [attendance, setAttendance] = useState(null);
@@ -15,6 +16,23 @@ const Dashboard = () => {
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
   const navigate = useNavigate();
+
+  useEffect(() => {
+    let previous = [];
+    const scan = async () => {
+      try {
+        const current = await native.listRemovableDrives();
+        const changes = diffRemovableDrives(previous, current);
+        previous = current;
+        await recordUsbChanges({ request, deviceId: localStorage.getItem("screenMonitorDeviceId"), changes });
+      } catch (error) {
+        console.error("USB audit failed:", error);
+      }
+    };
+    scan();
+    const timer = window.setInterval(scan, 5_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const heartbeat = async () => {

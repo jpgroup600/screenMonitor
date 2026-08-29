@@ -94,6 +94,11 @@ fn stop_monitoring(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn list_removable_drives() -> Vec<String> {
+    platform::removable_drives()
+}
+
+#[tauri::command]
 async fn capture_screenshot(state: State<'_, AppState>) -> Result<(), String> {
     let token = state
         .token
@@ -173,6 +178,7 @@ pub fn run() {
             start_monitoring,
             start_attendance_monitoring,
             stop_monitoring,
+            list_removable_drives,
             capture_screenshot,
             start_attendance_reminders,
             stop_attendance_reminders

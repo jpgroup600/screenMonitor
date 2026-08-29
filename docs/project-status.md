@@ -171,3 +171,5 @@
 - 직원 이벤트 등록 `POST /api/security-events`, 관리자 최근 이벤트 조회 `GET /api/security-events`
 - SecurityEvents 서비스 테스트 포함 .NET 테스트 15개 통과
 - 다음 단계: Windows 이동식 드라이브 감지와 관리자 보안 이벤트 화면
+- Windows 논리 드라이브를 5초마다 확인하여 이동식 드라이브 연결·해제 전환만 감사 API로 전송
+- USB 전환 TDD 포함 데스크톱 JavaScript 테스트 7개, Rust 테스트 11개 통과
