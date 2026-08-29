@@ -7,7 +7,7 @@ export default function SessionCard({ session, employeeId, projectId }) {
 
   const formattedTime = new Date(session.startTime).toLocaleString();
   const durationParts = session.activeDuration.split('.')[0].split(':');
-  const duration = `${durationParts[0]}h ${durationParts[1]}m ${durationParts[2]}s`;
+  const duration = `${durationParts.at(-3) || '00'}h ${durationParts.at(-2) || '00'}m ${durationParts.at(-1) || '00'}s`;
 
   const handleClick = () => {
     navigate(`/employees/${employeeId}/projects/${projectId}/sessions/${session.sessionId}`);
@@ -32,6 +32,10 @@ export default function SessionCard({ session, employeeId, projectId }) {
         >
           {session.status}
         </span>
+      </div>
+
+      <div className="mb-3 text-sm text-slate-400">
+        {session.projectId ? `프로젝트 세션 · ${session.projectId.slice(0, 8)}` : '일반 근무'}
       </div>
 
       <div className="flex items-center gap-4 text-gray-400">

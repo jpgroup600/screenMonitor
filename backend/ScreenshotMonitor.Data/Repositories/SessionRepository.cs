@@ -250,6 +250,13 @@ public class SessionRepository(
         }
     }
 
+    public async Task<IEnumerable<Session>> GetSessionsByEmployeeAsync(string employeeId) =>
+        await _dbContext.Sessions
+            .AsNoTracking()
+            .Where(session => session.EmployeeId == employeeId)
+            .OrderByDescending(session => session.StartTime)
+            .ToListAsync();
+
 
     public async Task<bool> DeleteSessionsAsync(string employeeId, string projectId)
     {

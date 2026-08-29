@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import SessionCard from "../../Components/Session/SessionCard";
-import { FaClock, FaSpinner, FaAngleLeft, FaAngleRight, FaCalendarAlt, FaTrash } from "react-icons/fa";
+import { FaClock, FaSpinner, FaAngleLeft, FaAngleRight, FaCalendarAlt } from "react-icons/fa";
 import request from "../../Actions/request";
 
 export default function Sessions() {
@@ -11,15 +11,12 @@ export default function Sessions() {
   const [error, setError] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedDate, setSelectedDate] = useState("all");
-  const [isDeleting, setIsDeleting] = useState(false);
   const sessionsPerPage = 12;
 
   useEffect(() => {
     const fetchSessions = async () => {
       try {
-        const data = await request.get(
-          `/session/get?employeeId=${employeeId}&projectId=${projectId}`
-        );
+        const data = await request.get(`/session/employee/${employeeId}`);
         setSessions(data);
       } catch (err) {
         setError(err.message || "Failed to fetch sessions");
@@ -28,7 +25,10 @@ export default function Sessions() {
       }
     };
 
-    employeeId && projectId && fetchSessions();
+    if (!employeeId) return undefined;
+    fetchSessions();
+    const refreshTimer = window.setInterval(fetchSessions, 10000);
+    return () => window.clearInterval(refreshTimer);
   }, [employeeId, projectId]);
 
   useEffect(() => setCurrentPage(1), [selectedDate]);
@@ -65,25 +65,6 @@ export default function Sessions() {
   const nextPage = () => currentPage < totalPages && setCurrentPage(currentPage + 1);
   const prevPage = () => currentPage > 1 && setCurrentPage(currentPage - 1);
 
-  const handleDeleteAllSessions = async () => {
-    if (!window.confirm('Are you sure you want to delete ALL sessions? This action cannot be undone.')) {
-      return;
-    }
-
-    try {
-      setIsDeleting(true);
-      await request.delete(`/session/delete?employeeId=${employeeId}&projectId=${projectId}`);
-      // Refresh the sessions list after deletion
-      const data = await request.get(`/session/get?employeeId=${employeeId}&projectId=${projectId}`);
-      setSessions(data);
-      alert('All sessions deleted successfully');
-    } catch (err) {
-      setError(err.message || "Failed to delete sessions");
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#1E2939] to-[#0F172A]">
       <div className="flex items-center gap-3 text-blue-400">
@@ -108,7 +89,7 @@ export default function Sessions() {
           <div className="flex items-center gap-3">
             <FaClock className="text-blue-400" />
             <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-400 to-blue-600 bg-clip-text text-transparent">
-              Work Sessions
+              직원 근무 세션
             </h1>
           </div>
           
@@ -132,19 +113,6 @@ export default function Sessions() {
                 ))}
               </select>
             </div>
-            
-            <button
-              onClick={handleDeleteAllSessions}
-              disabled={sessions.length === 0 || isDeleting}
-              className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-md text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isDeleting ? (
-                <FaSpinner className="animate-spin" />
-              ) : (
-                <FaTrash />
-              )}
-              <span>Delete All</span>
-            </button>
           </div>
         </div>
 
@@ -162,7 +130,7 @@ export default function Sessions() {
                   key={session.sessionId} 
                   session={session}
                   employeeId={employeeId}
-                  projectId={projectId}
+                  projectId={session.projectId || "general"}
                 />
               ))}
             </div>

@@ -26,7 +26,7 @@ export default function SessionDetails() {
   useEffect(() => {
     const fetchSessionsList = async () => {
       try {
-        const response = await request.get(`/session/get?employeeId=${employeeId}&projectId=${projectId}`);
+        const response = await request.get(`/session/employee/${employeeId}`);
         setSessionsList(response);
         // Find current session index
         const index = response.findIndex(s => s.sessionId === sessionId);
@@ -66,6 +66,12 @@ export default function SessionDetails() {
     fetchSessionsList();
     fetchApps();
     fetchScreenshots();
+    const refreshTimer = window.setInterval(() => {
+      fetchSessionsList();
+      fetchApps();
+      fetchScreenshots();
+    }, 10000);
+    return () => window.clearInterval(refreshTimer);
   }, [sessionId, employeeId, projectId]);
 
   useEffect(() => {
@@ -91,7 +97,8 @@ export default function SessionDetails() {
       newIndex = currentSessionIndex < sessionsList.length - 1 ? currentSessionIndex + 1 : 0;
     }
     
-    navigate(`/employees/${employeeId}/projects/${projectId}/sessions/${sessionsList[newIndex].sessionId}`);
+    const target = sessionsList[newIndex];
+    navigate(`/employees/${employeeId}/projects/${target.projectId || 'general'}/sessions/${target.sessionId}`);
   };
 
   const handleImageClick = (index) => {
@@ -257,7 +264,7 @@ export default function SessionDetails() {
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-900/90 via-transparent p-3 flex items-end opacity-0 group-hover:opacity-100 transition-opacity">
                         <span className="text-sm text-slate-300">
-                          {new Date(screenshot.timestamp).toLocaleTimeString()}
+                          {new Date(screenshot.createdAt).toLocaleTimeString()}
                         </span>
                       </div>
                     </div>

@@ -14,5 +14,6 @@ public interface ISessionRepository
     Task<string?> EndSessionAutoOnDisconnectAsync(string employeeId, string status);
 
     Task<IEnumerable<Session>> GetSessionsByStatusAsync(string employeeId, string projectId,string status = null);
+    Task<IEnumerable<Session>> GetSessionsByEmployeeAsync(string employeeId);
     Task<bool> DeleteSessionsAsync(string employeeId, string projectId);
 }

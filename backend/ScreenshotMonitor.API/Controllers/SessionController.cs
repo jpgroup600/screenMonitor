@@ -56,6 +56,24 @@ public class SessionController(
         return Ok(new { message = "All sessions deleted successfully." });
     }
 
+    [Authorize(Roles = "Admin")]
+    [HttpGet("employee/{employeeId}")]
+    public async Task<ActionResult<IEnumerable<SessionResponseDto>>> GetEmployeeSessions(string employeeId)
+    {
+        var sessions = await _sessionRepo.GetSessionsByEmployeeAsync(employeeId);
+        var now = DateTime.UtcNow;
+        return Ok(sessions.Select(session => new SessionResponseDto
+        {
+            SessionId = session.Id,
+            EmployeeId = session.EmployeeId,
+            ProjectId = session.ProjectId,
+            StartTime = session.StartTime,
+            EndTime = session.EndTime,
+            ActiveDuration = (session.EndTime ?? now) - session.StartTime,
+            Status = session.Status
+        }));
+    }
+
     /// <summary>
     /// Start a new session for an employee in a project.
     /// </summary>

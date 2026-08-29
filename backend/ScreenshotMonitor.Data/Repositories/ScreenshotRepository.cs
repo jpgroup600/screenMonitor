@@ -14,6 +14,7 @@ using ScreenshotMonitor.Data.Dto.Project;
 using ScreenshotMonitor.Data.Dto.Screenshot;
 using ScreenshotMonitor.Data.Entities;
 using ScreenshotMonitor.Data.Interfaces.Repositories;
+using ScreenshotMonitor.Data.Services;
 
 namespace ScreenshotMonitor.Data.Repositories;
 
@@ -124,7 +125,9 @@ public async Task<bool> UploadScreenshotDuringSessionAsync(string employeeId, IF
         // Ensure directory exists
         Directory.CreateDirectory(_storagePath);
 
-        string fileName = $"{session.Id}_{DateTime.UtcNow:yyyyMMddHHmmss}{fileExtension}";
+        var capturedAt = DateTime.UtcNow;
+        var screenshotId = Guid.NewGuid();
+        string fileName = ScreenshotFileNaming.Create(session.Id, fileExtension, capturedAt, screenshotId);
         string fullPath = Path.Combine(_storagePath, fileName);
 
         using (var stream = new FileStream(fullPath, FileMode.Create))
@@ -137,10 +140,10 @@ public async Task<bool> UploadScreenshotDuringSessionAsync(string employeeId, IF
 
         var screenshot = new Screenshot
         {
-            Id = Guid.NewGuid().ToString(),
+            Id = screenshotId.ToString(),
             SessionId = session.Id,
             FilePath = relativeFilePath,
-            CapturedAt = DateTime.UtcNow
+            CapturedAt = capturedAt
         };
 
         _dbContext.Screenshots.Add(screenshot);
