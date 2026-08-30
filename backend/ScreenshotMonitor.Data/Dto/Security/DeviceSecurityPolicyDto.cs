@@ -30,5 +30,5 @@ public record UpdateDeviceSecurityPolicyDto(
     bool RestoreEnabled);
 
 public record AdminAuditLogDto(
-    string Id, string AdminId, string Action, string TargetType, string TargetId,
+    string Id, long Sequence, string AdminId, string Action, string TargetType, string TargetId,
     string BeforeJson, string AfterJson, string PreviousHash, string EntryHash, DateTime OccurredAt);

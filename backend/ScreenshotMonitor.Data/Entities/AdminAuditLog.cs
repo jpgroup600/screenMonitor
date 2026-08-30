@@ -6,6 +6,7 @@ namespace ScreenshotMonitor.Data.Entities;
 public class AdminAuditLog
 {
     [Key] public string Id { get; set; } = Guid.NewGuid().ToString();
+    public long Sequence { get; set; }
     [Required] public string AdminId { get; set; } = string.Empty;
     [Required, MaxLength(100)] public string Action { get; set; } = string.Empty;
     [Required, MaxLength(100)] public string TargetType { get; set; } = string.Empty;

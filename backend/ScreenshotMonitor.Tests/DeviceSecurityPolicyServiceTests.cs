@@ -57,6 +57,10 @@ public class DeviceSecurityPolicyServiceTests
         var entries = await db.AdminAuditLogs.OrderBy(x => x.OccurredAt).ToListAsync();
         Assert.Equal(2, entries.Count); Assert.Equal(entries[0].EntryHash, entries[1].PreviousHash);
         Assert.NotEqual(entries[0].EntryHash, entries[1].EntryHash);
+        Assert.True(await service.VerifyAuditChainAsync());
+
+        entries[0].AfterJson = "{\"tampered\":true}"; await db.SaveChangesAsync();
+        Assert.False(await service.VerifyAuditChainAsync());
     }
 
     private static UpdateDeviceSecurityPolicyDto Update(bool monitoring = true, bool screenshots = true, bool backup = true, bool usb = true, bool network = true) =>

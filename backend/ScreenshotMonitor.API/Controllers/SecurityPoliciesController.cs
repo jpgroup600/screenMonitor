@@ -37,8 +37,11 @@ public class SecurityPoliciesController(DeviceSecurityPolicyService service) : C
     [Authorize(Roles = "Admin"), HttpGet("audit")]
     public async Task<ActionResult<IEnumerable<AdminAuditLogDto>>> Audit([FromQuery] int take = 200) =>
         Ok((await service.ListAuditAsync(take)).Select(x => new AdminAuditLogDto(
-            x.Id, x.AdminId, x.Action, x.TargetType, x.TargetId, x.BeforeJson, x.AfterJson,
+            x.Id, x.Sequence, x.AdminId, x.Action, x.TargetType, x.TargetId, x.BeforeJson, x.AfterJson,
             x.PreviousHash, x.EntryHash, x.OccurredAt)));
+
+    [Authorize(Roles = "Admin"), HttpGet("audit/integrity")]
+    public async Task<ActionResult> AuditIntegrity() => Ok(new { valid = await service.VerifyAuditChainAsync() });
 
     private static DeviceSecurityPolicyDto ToDto(DeviceSecurityPolicy value) => new(
         value.DeviceId, value.MonitoringEnabled, value.ScreenshotsEnabled, value.ActiveAppTrackingEnabled,

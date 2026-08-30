@@ -11,7 +11,8 @@ import {
   FiClock,
   FiMonitor,
   FiShield,
-  FiArchive
+  FiArchive,
+  FiFileText
 } from 'react-icons/fi';
 import LogoutPopup from './LogoutPopup';
 
@@ -27,6 +28,7 @@ export default function Sidebar({ isSidebarOpen, setIsSidebarOpen }) {
     { title: 'Devices', icon: <FiMonitor />, link: '/devices' },
     { title: 'Security Events', icon: <FiShield />, link: '/security-events' },
     { title: 'Backups', icon: <FiArchive />, link: '/backups' },
+    { title: 'Audit Logs', icon: <FiFileText />, link: '/audit-logs' },
   ];
 
   useEffect(() => {

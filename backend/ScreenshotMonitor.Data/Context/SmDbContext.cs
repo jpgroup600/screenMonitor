@@ -111,6 +111,7 @@ namespace ScreenshotMonitor.Data.Context
             modelBuilder.Entity<DeviceSecurityPolicy>().HasOne(x => x.Device).WithOne().HasForeignKey<DeviceSecurityPolicy>(x => x.DeviceId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<DeviceSecurityPolicy>().HasIndex(x => x.DeviceId).IsUnique();
             modelBuilder.Entity<AdminAuditLog>().HasIndex(x => x.OccurredAt);
+            modelBuilder.Entity<AdminAuditLog>().HasIndex(x => x.Sequence).IsUnique();
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)

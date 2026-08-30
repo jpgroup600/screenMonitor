@@ -15,6 +15,7 @@ import Attendance from './Screens/Attendance';
 import Devices from './Screens/Devices';
 import SecurityEvents from './Screens/SecurityEvents';
 import Backups from './Screens/Backups';
+import AuditLogs from './Screens/AuditLogs';
 
 function App() {
   const token = localStorage.getItem("token");
@@ -46,6 +47,7 @@ function App() {
             <Route path="/devices" element={<Devices />} />
             <Route path="/security-events" element={<SecurityEvents />} />
             <Route path="/backups" element={<Backups />} />
+            <Route path="/audit-logs" element={<AuditLogs />} />
             <Route path="/sessions/:employeeId/:projectId" element={<Sessions />} />
             <Route 
               path="/employees/:employeeId/projects/:projectId/sessions/:sessionId" 

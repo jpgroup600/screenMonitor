@@ -53,16 +53,35 @@ public class DeviceSecurityPolicyService(SmDbContext db, TimeProvider timeProvid
     public Task<List<AdminAuditLog>> ListAuditAsync(int take = 200) => db.AdminAuditLogs.AsNoTracking()
         .OrderByDescending(x => x.OccurredAt).Take(Math.Clamp(take, 1, 500)).ToListAsync();
 
+    public async Task<bool> VerifyAuditChainAsync()
+    {
+        var entries = await db.AdminAuditLogs.AsNoTracking().OrderBy(x => x.Sequence).ToListAsync();
+        var previousHash = new string('0', 64);
+        foreach (var entry in entries)
+        {
+            if (entry.PreviousHash != previousHash || entry.EntryHash != ComputeHash(
+                previousHash, entry.OccurredAt, entry.AdminId, entry.Action, entry.TargetType,
+                entry.TargetId, entry.BeforeJson, entry.AfterJson)) return false;
+            previousHash = entry.EntryHash;
+        }
+        return true;
+    }
+
     private async Task AppendAuditAsync(string adminId, string action, string targetType, string targetId, string before, string after, DateTime occurredAt)
     {
-        var previousHash = await db.AdminAuditLogs.OrderByDescending(x => x.OccurredAt).ThenByDescending(x => x.Id)
-            .Select(x => x.EntryHash).FirstOrDefaultAsync() ?? new string('0', 64);
-        var canonical = string.Join("|", previousHash, occurredAt.ToUniversalTime().ToString("O"), adminId, action, targetType, targetId, before, after);
-        var entryHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
+        var previous = await db.AdminAuditLogs.OrderByDescending(x => x.Sequence).Select(x => new { x.Sequence, x.EntryHash }).FirstOrDefaultAsync();
+        var previousHash = previous?.EntryHash ?? new string('0', 64);
+        var entryHash = ComputeHash(previousHash, occurredAt, adminId, action, targetType, targetId, before, after);
         db.AdminAuditLogs.Add(new AdminAuditLog {
-            AdminId = adminId, Action = action, TargetType = targetType, TargetId = targetId,
+            Sequence = (previous?.Sequence ?? 0) + 1, AdminId = adminId, Action = action, TargetType = targetType, TargetId = targetId,
             BeforeJson = before, AfterJson = after, PreviousHash = previousHash, EntryHash = entryHash, OccurredAt = occurredAt
         });
+    }
+
+    private static string ComputeHash(string previousHash, DateTime occurredAt, string adminId, string action, string targetType, string targetId, string before, string after)
+    {
+        var canonical = string.Join("|", previousHash, occurredAt.ToUniversalTime().ToString("O"), adminId, action, targetType, targetId, before, after);
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
     }
 
     private static DeviceSecurityPolicy Default(string deviceId) => new() { DeviceId = deviceId };
