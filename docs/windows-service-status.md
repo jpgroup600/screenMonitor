@@ -27,10 +27,11 @@
 - 정책 제한값은 서버와 관리자 UI 및 데스크톱에서 각각 검증한다: 스캔 지연 0~1000ms, 일일 업로드 1MB~10TB.
 - 사용자 JWT는 WebView `localStorage` 대신 사용자 범위 DPAPI 암호화 파일에 저장한다. 기존 평문 토큰은 최초 실행 시 이전하고 논리 저장소에서 삭제한다.
 - 2026-08-31 업그레이드 실사용 검증에서 서비스는 `RUNNING`·`AUTO_START`, 설치된 서비스 바이너리는 릴리스 산출물과 SHA-256이 일치했고 앱 실행 직후 `auth-token.dat` 생성도 확인했다.
+- 2026-08-31 USB 장치 증거·SHA-256·위험도 분석과 종량제 네트워크 중지가 포함된 설치본으로 다시 업그레이드했다. 서비스 해시 일치, `RUNNING`, 앱 백그라운드 실행 및 기존 암호화 정책의 새 형식 갱신을 확인했다.
 
 최신 설치 파일:
 
 - 경로: `frontend/desktop-tauri/src-tauri/target/release/bundle/nsis/출퇴근 관리 프로그램_2.0.0_x64-setup.exe`
-- 크기: 3,993,622 bytes
-- SHA-256: `D6012516DFE4B7BC0EEAFC0339B8360C982ABA191766B32B9F851D9A44D47230`
+- 크기: 4,056,542 bytes
+- SHA-256: `4A134A13D89C44D90CCB7578F639E2D1215D6EBD7FF744E96C04BAC4CD7C5E5B`
 - 코드 서명: `NotSigned`
