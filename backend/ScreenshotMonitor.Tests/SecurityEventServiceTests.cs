@@ -19,6 +19,8 @@ public class SecurityEventServiceTests
     [Theory]
     [InlineData("FILE_DELETED")]
     [InlineData("FILE_MOVED")]
+    [InlineData("FILE_CREATED")]
+    [InlineData("FILE_MODIFIED")]
     public async Task Records_file_lifecycle_events(string eventType)
     {
         await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();

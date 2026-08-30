@@ -6,6 +6,7 @@ mod backup_retry;
 mod backup_staging;
 mod core;
 mod data_protection;
+mod file_change_audit;
 mod monitor;
 mod network_audit;
 mod offline_queue;

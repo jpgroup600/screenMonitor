@@ -27,6 +27,7 @@ pub struct MonitoringPolicy {
     pub active_app_tracking_enabled: bool,
     pub idle_tracking_enabled: bool,
     pub network_audit_enabled: bool,
+    pub file_change_audit_enabled: bool,
     pub restore_enabled: bool,
 }
 
@@ -62,6 +63,12 @@ pub fn spawn(
         let mut network_baseline: Option<
             std::collections::HashSet<crate::network_audit::ExternalConnection>,
         > = None;
+        let (file_change_tx, mut file_change_rx) = tokio::sync::mpsc::unbounded_channel();
+        let _file_watcher = if policy.file_change_audit_enabled {
+            crate::file_change_audit::start(&platform::fixed_drives(), file_change_tx.clone()).ok()
+        } else {
+            None
+        };
         while task_running.load(Ordering::SeqCst) {
             tokio::select! {
                 _ = activity_tick.tick() => {
@@ -98,6 +105,16 @@ pub fn spawn(
                             }
                         }
                         network_baseline = Some(current);
+                    }
+                }
+                event = file_change_rx.recv(), if policy.file_change_audit_enabled => {
+                    if let Some(event) = event {
+                        let source = event.source.to_string_lossy().into_owned();
+                        let details = serde_json::json!({
+                            "destination": event.destination.map(|path| path.to_string_lossy().into_owned()),
+                            "evidence": "filesystem_notification"
+                        }).to_string();
+                        let _ = api.security_event(&device_id, event.event_type, &source, &details).await;
                     }
                 }
             }
@@ -242,6 +259,7 @@ mod tests {
             "activeAppTrackingEnabled": true,
             "idleTrackingEnabled": false,
             "networkAuditEnabled": true,
+            "fileChangeAuditEnabled": true,
             "restoreEnabled": false
         }))
         .unwrap();
@@ -249,6 +267,7 @@ mod tests {
         assert!(policy.active_app_tracking_enabled);
         assert!(!policy.idle_tracking_enabled);
         assert!(policy.network_audit_enabled);
+        assert!(policy.file_change_audit_enabled);
         assert!(!policy.restore_enabled);
     }
 
