@@ -7,7 +7,11 @@ pub enum ExclusionReason {
     SystemDirectory,
     ApplicationDirectory,
     BrowserCredentialStore,
+    MessengerData,
+    EmailStore,
+    PersonalCredential,
     TemporaryDirectory,
+    CacheFile,
     SystemFile,
     FileTooLarge,
 }
@@ -57,12 +61,34 @@ impl BackupPolicy {
             return Some(ExclusionReason::ApplicationDirectory);
         }
 
-        if is_browser_credential_store(&components) {
+        if is_browser_profile(&components) {
             return Some(ExclusionReason::BrowserCredentialStore);
+        }
+
+        if is_messenger_store(&components) {
+            return Some(ExclusionReason::MessengerData);
+        }
+
+        if is_email_store(&components) {
+            return Some(ExclusionReason::EmailStore);
+        }
+
+        if is_personal_credential(&components) {
+            return Some(ExclusionReason::PersonalCredential);
         }
 
         if contains_sequence(&components, &["appdata", "local", "temp"]) {
             return Some(ExclusionReason::TemporaryDirectory);
+        }
+
+        if matches!(
+            path.extension()
+                .and_then(|value| value.to_str())
+                .map(str::to_lowercase)
+                .as_deref(),
+            Some("tmp" | "cache")
+        ) {
+            return Some(ExclusionReason::CacheFile);
         }
 
         if matches!(
@@ -90,18 +116,32 @@ fn contains_sequence(components: &[&str], sequence: &[&str]) -> bool {
         .any(|window| window == sequence)
 }
 
-fn is_browser_credential_store(components: &[&str]) -> bool {
-    let is_chromium_profile = contains_sequence(components, &["google", "chrome", "user data"])
-        || contains_sequence(components, &["microsoft", "edge", "user data"]);
-    let is_firefox_profile = contains_sequence(components, &["mozilla", "firefox", "profiles"]);
-    let file_name = components.last().copied().unwrap_or_default();
+fn is_browser_profile(components: &[&str]) -> bool {
+    contains_sequence(components, &["google", "chrome", "user data"])
+        || contains_sequence(components, &["microsoft", "edge", "user data"])
+        || contains_sequence(components, &["mozilla", "firefox", "profiles"])
+}
 
-    (is_chromium_profile
-        && matches!(
-            file_name,
-            "cookies" | "login data" | "web data" | "local state"
-        ))
-        || (is_firefox_profile && matches!(file_name, "cookies.sqlite" | "logins.json" | "key4.db"))
+fn is_messenger_store(components: &[&str]) -> bool {
+    contains_sequence(components, &["appdata", "roaming", "kakaotalk"])
+        || contains_sequence(components, &["appdata", "roaming", "slack"])
+        || contains_sequence(components, &["appdata", "roaming", "discord"])
+        || contains_sequence(components, &["microsoft", "teams"])
+        || components
+            .iter()
+            .any(|part| part.starts_with("msteams_8wekyb3d8bbwe"))
+}
+
+fn is_email_store(components: &[&str]) -> bool {
+    contains_sequence(components, &["thunderbird", "profiles"])
+        || matches!(components.last().copied().unwrap_or_default(), value if value.ends_with(".pst") || value.ends_with(".ost"))
+}
+
+fn is_personal_credential(components: &[&str]) -> bool {
+    contains_sequence(components, &["appdata", "roaming", "microsoft", "crypto"])
+        || contains_sequence(components, &["appdata", "roaming", "microsoft", "protect"])
+        || components.iter().any(|part| *part == ".ssh")
+        || matches!(components.last().copied().unwrap_or_default(), value if value.ends_with(".pfx") || value.ends_with(".p12") || value.ends_with(".key"))
 }
 
 #[cfg(test)]
@@ -134,13 +174,22 @@ mod tests {
     }
 
     #[test]
-    fn excludes_browser_password_and_cookie_stores_but_not_downloads() {
+    fn excludes_entire_browser_profiles_but_not_downloads() {
         let policy = BackupPolicy::default();
 
         assert_eq!(
             policy.exclusion_reason(
                 Path::new(
                     r"C:\Users\employee\AppData\Local\Google\Chrome\User Data\Default\Login Data"
+                ),
+                Some(20)
+            ),
+            Some(ExclusionReason::BrowserCredentialStore)
+        );
+        assert_eq!(
+            policy.exclusion_reason(
+                Path::new(
+                    r"C:\Users\employee\AppData\Local\Google\Chrome\User Data\Default\History"
                 ),
                 Some(20)
             ),
@@ -159,6 +208,43 @@ mod tests {
             Path::new(r"C:\Users\employee\Downloads\contract.pdf"),
             Some(20)
         ));
+    }
+
+    #[test]
+    fn forced_private_data_exclusions_cannot_be_included() {
+        let policy = BackupPolicy::default();
+        let cases = [
+            (
+                r"C:\Users\employee\AppData\Roaming\KakaoTalk\users\chat.db",
+                ExclusionReason::MessengerData,
+            ),
+            (
+                r"C:\Users\employee\AppData\Roaming\Slack\storage\messages.db",
+                ExclusionReason::MessengerData,
+            ),
+            (
+                r"C:\Users\employee\AppData\Roaming\Thunderbird\Profiles\mail\Inbox",
+                ExclusionReason::EmailStore,
+            ),
+            (
+                r"C:\Users\employee\Documents\personal.pfx",
+                ExclusionReason::PersonalCredential,
+            ),
+            (
+                r"C:\Users\employee\.ssh\id_ed25519",
+                ExclusionReason::PersonalCredential,
+            ),
+            (r"D:\work\build.cache", ExclusionReason::CacheFile),
+            (r"D:\work\scratch.tmp", ExclusionReason::CacheFile),
+        ];
+        for (path, reason) in cases {
+            assert_eq!(
+                policy.exclusion_reason(Path::new(path), Some(20)),
+                Some(reason),
+                "{path}"
+            );
+            assert!(!policy.should_include(Path::new(path), Some(20)), "{path}");
+        }
     }
 
     #[test]

@@ -346,3 +346,14 @@
 - 시스템·인증정보 강제 제외는 관리자 정책과 무관하게 항상 적용하는 원칙 유지
 - EF 마이그레이션 `AddDeviceSecurityPoliciesAndAdminAudit` 추가
 - 검증: 백엔드 37개, 관리자 12개, Tauri JavaScript 16개, Rust 33개 테스트 통과
+
+## 2026-08-31 강제 민감정보 제외 확대
+
+- Chrome·Edge User Data와 Firefox Profiles 전체를 로컬 스캔 단계에서 강제 제외
+- KakaoTalk, Slack, Discord, Teams 로컬 대화·계정 데이터 경로 강제 제외
+- Thunderbird 프로필과 Outlook PST·OST 로컬 메일 저장소 강제 제외
+- Windows Crypto·Protect, 사용자 `.ssh`, PFX·P12·KEY 개인 인증서·개인키 강제 제외
+- 확장자가 `.tmp`, `.cache`인 임시·캐시 파일 강제 제외
+- 해당 항목은 서버 파일목록으로 전송되기 전에 제거되며 관리자 화이트리스트로도 포함할 수 없음
+- 업무 다운로드 폴더의 일반 파일은 계속 포함
+- 강제 제외 회귀 테스트를 포함한 Rust 백업 정책 테스트 5개 통과

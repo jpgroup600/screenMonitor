@@ -230,7 +230,14 @@ async fn run_incremental_backup(
 ) -> Result<IncrementalBackupResult, String> {
     let client = api::ApiClient::new(BACKEND_URL.into(), token.clone());
     if client.active_inventory(&device_id).await?.is_some() {
-        return Ok(IncrementalBackupResult { scanned_files: 0, changed_files: 0, uploaded_files: 0, failed_files: 0, skipped_entries: 0, inaccessible_entries: 0 });
+        return Ok(IncrementalBackupResult {
+            scanned_files: 0,
+            changed_files: 0,
+            uploaded_files: 0,
+            failed_files: 0,
+            skipped_entries: 0,
+            inaccessible_entries: 0,
+        });
     }
     let inventory = tauri::async_runtime::spawn_blocking(move || {
         let policy = backup_policy::BackupPolicy::default();

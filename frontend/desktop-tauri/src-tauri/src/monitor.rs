@@ -243,7 +243,8 @@ mod tests {
             "idleTrackingEnabled": false,
             "networkAuditEnabled": true,
             "restoreEnabled": false
-        })).unwrap();
+        }))
+        .unwrap();
         assert!(!policy.screenshots_enabled);
         assert!(policy.active_app_tracking_enabled);
         assert!(!policy.idle_tracking_enabled);
