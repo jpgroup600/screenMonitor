@@ -34,8 +34,19 @@ public class SecurityEventService(SmDbContext dbContext, TimeProvider timeProvid
         dbContext.SecurityEvents.Add(entry); await dbContext.SaveChangesAsync(); return entry;
     }
 
-    public Task<List<SecurityEvent>> ListAsync(int take = 200) => dbContext.SecurityEvents.AsNoTracking().Include(x => x.Employee)
-        .OrderByDescending(x => x.OccurredAt).Take(Math.Clamp(take, 1, 500)).ToListAsync();
+    public Task<List<SecurityEvent>> ListAsync(int skip = 0, int take = 100, string? eventType = null, string? search = null)
+    {
+        var query = dbContext.SecurityEvents.AsNoTracking().Include(x => x.Employee).AsQueryable();
+        if (!string.IsNullOrWhiteSpace(eventType)) query = query.Where(x => x.EventType == eventType.Trim());
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var keyword = search.Trim().ToLower();
+            query = query.Where(x => x.Employee.FullName.ToLower().Contains(keyword)
+                || x.DeviceId.ToLower().Contains(keyword) || x.Source.ToLower().Contains(keyword));
+        }
+        return query.OrderByDescending(x => x.OccurredAt).ThenByDescending(x => x.Id)
+            .Skip(Math.Max(skip, 0)).Take(Math.Clamp(take, 1, 200)).ToListAsync();
+    }
 
     private static string DetermineSeverity(string eventType, string details)
     {

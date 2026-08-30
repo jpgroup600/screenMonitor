@@ -18,6 +18,8 @@ public class SecurityEventsController(SecurityEventService service) : Controller
         catch (UnauthorizedAccessException) { return Forbid(); }
     }
     [Authorize(Roles = "Admin"), HttpGet]
-    public async Task<ActionResult<IEnumerable<SecurityEventResponseDto>>> List([FromQuery] int take = 200) => Ok((await service.ListAsync(take)).Select(ToResponse));
+    public async Task<ActionResult<IEnumerable<SecurityEventResponseDto>>> List([FromQuery] int skip = 0, [FromQuery] int take = 100,
+        [FromQuery] string? eventType = null, [FromQuery] string? search = null) =>
+        Ok((await service.ListAsync(skip, take, eventType, search)).Select(ToResponse));
     private static SecurityEventResponseDto ToResponse(ScreenshotMonitor.Data.Entities.SecurityEvent value) => new(value.Id, value.EmployeeId, value.Employee?.FullName ?? "", value.DeviceId, value.EventType, value.Source, value.Severity, value.Details, value.OccurredAt);
 }
