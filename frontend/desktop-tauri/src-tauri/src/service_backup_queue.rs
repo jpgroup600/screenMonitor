@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -28,6 +29,7 @@ pub struct ServiceBackupQueue {
     directory: PathBuf,
     containers: PathBuf,
     max_bytes: u64,
+    stage_lock: Arc<Mutex<()>>,
 }
 
 impl ServiceBackupQueue {
@@ -42,10 +44,12 @@ impl ServiceBackupQueue {
             directory,
             containers,
             max_bytes,
+            stage_lock: Arc::new(Mutex::new(())),
         })
     }
 
     pub fn stage(&self, source: &Path) -> Result<PendingServiceBackup, String> {
+        let _guard = self.stage_lock.lock().map_err(|error| error.to_string())?;
         let metadata = fs::metadata(source).map_err(|error| error.to_string())?;
         let modified = metadata
             .modified()
@@ -206,5 +210,24 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let queue = ServiceBackupQueue::new(directory.path().join("queue")).unwrap();
         assert!(queue.complete(directory.path(), directory.path()).is_err());
+    }
+
+    #[test]
+    fn concurrent_identical_staging_creates_only_one_job() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("same.txt");
+        fs::write(&source, b"same stable version").unwrap();
+        let queue = ServiceBackupQueue::new(directory.path().join("queue")).unwrap();
+        let first_queue = queue.clone();
+        let first_source = source.clone();
+        let first = std::thread::spawn(move || first_queue.stage(&first_source).unwrap());
+        let second_queue = queue.clone();
+        let second_source = source.clone();
+        let second = std::thread::spawn(move || second_queue.stage(&second_source).unwrap());
+        assert_eq!(
+            first.join().unwrap().content_hash,
+            second.join().unwrap().content_hash
+        );
+        assert_eq!(queue.pending().unwrap().len(), 1);
     }
 }
