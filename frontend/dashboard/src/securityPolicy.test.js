@@ -7,6 +7,7 @@ test('every independently controlled security module is represented', () => {
     'monitoringEnabled', 'screenshotsEnabled', 'activeAppTrackingEnabled', 'idleTrackingEnabled',
     'backupEnabled', 'usbAuditEnabled', 'usbFileCopyAuditEnabled', 'networkAuditEnabled', 'fileChangeAuditEnabled',
     'attendanceRemindersEnabled', 'restoreEnabled', 'retentionEnabled', 'resourceThrottlingEnabled', 'pauseBackupOnBattery',
+    'pauseBackupOnMeteredNetwork',
   ]);
 });
 
@@ -24,7 +25,7 @@ test('API payload contains module switches and bounded retention settings', () =
     retentionDays: 30, maxBackupBytes: 5 * 1024 ** 3, maxVersionsPerFile: 12,
     scanThrottleMilliseconds: 15, dailyUploadLimitBytes: 5 * 1024 ** 3,
   });
-  assert.equal(Object.keys(payload).length, 19);
+  assert.equal(Object.keys(payload).length, 20);
   assert.equal(payload.deviceId, undefined);
   assert.equal(payload.retentionDays, 30);
   assert.equal(payload.maxBackupBytes, 5 * 1024 ** 3);

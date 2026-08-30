@@ -1,5 +1,15 @@
 # Screen Monitor 작업 현황
 
+## 2026-08-31 종량제 네트워크 백업 중지
+
+- 장치별 관리자 정책에 `종량제 네트워크 백업 중지` 독립 스위치 추가, 기본값 ON
+- Windows 네트워크 연결 비용이 Fixed·Variable·Roaming·OverDataLimit이면 승인된 백업 업로드 큐를 그대로 유지하고 다음 주기로 연기
+- 리소스 제한 전체 스위치가 OFF이면 배터리·종량제 중지 하위 정책도 적용하지 않음
+- Windows Runtime 연결 비용 조회는 숨김 프로세스로 실행하며 조회 실패는 일반 네트워크로 처리해 수집 루프 장애를 방지
+- EF 마이그레이션 `AddMeteredNetworkPolicy`과 감사로그 전·후 스냅샷에 새 설정 포함
+- 검증: 백엔드 58개, Rust 65개, Tauri JavaScript 20개, 관리자 17개 테스트 및 양쪽 프로덕션 빌드 통과
+- 현재 PC 실측: `NetworkCostType=Unrestricted`, Metered=false
+
 ## 2026-08-31 USB 증거 메타데이터 보강
 
 - Windows 서비스의 USB 연결 이벤트에 제조사·모델·장치 일련번호, 볼륨 이름·파일시스템·볼륨 일련번호와 BitLocker 보호 상태 추가

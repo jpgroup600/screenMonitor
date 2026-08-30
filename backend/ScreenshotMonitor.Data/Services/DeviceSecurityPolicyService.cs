@@ -74,6 +74,7 @@ public class DeviceSecurityPolicyService(SmDbContext db, TimeProvider timeProvid
         policy.MaxVersionsPerFile = value.MaxVersionsPerFile;
         policy.ResourceThrottlingEnabled = value.ResourceThrottlingEnabled;
         policy.PauseBackupOnBattery = value.PauseBackupOnBattery;
+        policy.PauseBackupOnMeteredNetwork = value.PauseBackupOnMeteredNetwork ?? true;
         policy.ScanThrottleMilliseconds = value.ScanThrottleMilliseconds;
         policy.DailyUploadLimitBytes = value.DailyUploadLimitBytes;
     }
@@ -96,7 +97,7 @@ public class DeviceSecurityPolicyService(SmDbContext db, TimeProvider timeProvid
         value.BackupEnabled, value.UsbAuditEnabled, value.UsbFileCopyAuditEnabled, value.NetworkAuditEnabled, value.FileChangeAuditEnabled,
         value.AttendanceRemindersEnabled, value.RestoreEnabled, value.RetentionEnabled,
         value.RetentionDays, value.MaxBackupBytes, value.MaxVersionsPerFile,
-        value.ResourceThrottlingEnabled, value.PauseBackupOnBattery,
+        value.ResourceThrottlingEnabled, value.PauseBackupOnBattery, value.PauseBackupOnMeteredNetwork,
         value.ScanThrottleMilliseconds, value.DailyUploadLimitBytes
     });
 }

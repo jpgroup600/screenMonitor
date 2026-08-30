@@ -113,6 +113,42 @@ pub fn on_battery() -> bool {
     unsafe { GetSystemPowerStatus(&mut status) != 0 && status.ACLineStatus == 0 }
 }
 
+fn parse_metered_network_output(output: &[u8]) -> bool {
+    String::from_utf8_lossy(output)
+        .trim()
+        .eq_ignore_ascii_case("true")
+}
+
+#[cfg(windows)]
+pub fn metered_network() -> bool {
+    use std::os::windows::process::CommandExt;
+    use std::process::Command;
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    const SCRIPT: &str = r#"
+try {
+  [void][Windows.Networking.Connectivity.NetworkInformation, Windows.Networking.Connectivity, ContentType=WindowsRuntime]
+  $profile = [Windows.Networking.Connectivity.NetworkInformation]::GetInternetConnectionProfile()
+  if ($null -eq $profile) { 'False'; exit }
+  $cost = $profile.GetConnectionCost()
+  (($cost.NetworkCostType -eq 'Fixed') -or ($cost.NetworkCostType -eq 'Variable') -or $cost.Roaming -or $cost.OverDataLimit)
+} catch { 'False' }
+"#;
+    Command::new("powershell.exe")
+        .args([
+            "-NoLogo",
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            SCRIPT,
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .is_some_and(|output| parse_metered_network_output(&output.stdout))
+}
+
 #[cfg(not(windows))]
 pub fn removable_drives() -> Vec<String> {
     Vec::new()
@@ -131,4 +167,21 @@ pub fn idle_seconds() -> u32 {
 #[cfg(not(windows))]
 pub fn on_battery() -> bool {
     false
+}
+
+#[cfg(not(windows))]
+pub fn metered_network() -> bool {
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_only_an_explicit_metered_result() {
+        assert!(parse_metered_network_output(b"True\r\n"));
+        assert!(!parse_metered_network_output(b"False\r\n"));
+        assert!(!parse_metered_network_output(b"warning"));
+    }
 }

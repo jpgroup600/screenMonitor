@@ -12,6 +12,7 @@ export const defaultDeviceSecurityPolicy = Object.freeze({
   restoreEnabled: true,
   resourceThrottlingEnabled: true,
   pauseBackupOnBattery: true,
+  pauseBackupOnMeteredNetwork: true,
   scanThrottleMilliseconds: 2,
   dailyUploadLimitBytes: 10 * 1024 ** 3,
 });

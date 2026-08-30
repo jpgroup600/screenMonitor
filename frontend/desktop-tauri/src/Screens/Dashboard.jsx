@@ -50,7 +50,7 @@ const Dashboard = ({ token, setToken }) => {
     const initial = window.setTimeout(processQueue, 10_000);
     const timer = window.setInterval(processQueue, 60_000);
     return () => { window.clearTimeout(initial); window.clearInterval(timer); };
-  }, [securityPolicy?.backupEnabled, securityPolicy?.resourceThrottlingEnabled, securityPolicy?.pauseBackupOnBattery, securityPolicy?.dailyUploadLimitBytes]);
+  }, [securityPolicy?.backupEnabled, securityPolicy?.resourceThrottlingEnabled, securityPolicy?.pauseBackupOnBattery, securityPolicy?.pauseBackupOnMeteredNetwork, securityPolicy?.dailyUploadLimitBytes]);
 
   useEffect(() => {
     if (!securityPolicy?.backupEnabled) return undefined;

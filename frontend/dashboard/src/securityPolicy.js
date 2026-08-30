@@ -13,6 +13,7 @@ export const securityPolicyModules = [
   ['retentionEnabled', '백업 자동 정리', '보존 기간·장치 용량·파일별 버전 수에 따라 오래된 백업 정리'],
   ['resourceThrottlingEnabled', '백업 리소스 제한', '스캔 속도와 일일 업로드 용량 제한 적용'],
   ['pauseBackupOnBattery', '배터리 사용 중 백업 중지', '전원 어댑터가 분리되면 백업 업로드를 대기'],
+  ['pauseBackupOnMeteredNetwork', '종량제 네트워크 백업 중지', '데이터 사용량에 따라 과금되는 연결에서는 백업 업로드를 대기'],
 ];
 
 export function updateSecurityPolicy(policy, key, enabled) {

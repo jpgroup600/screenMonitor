@@ -21,6 +21,7 @@ public record DeviceSecurityPolicyDto(
     int MaxVersionsPerFile,
     bool ResourceThrottlingEnabled,
     bool PauseBackupOnBattery,
+    bool PauseBackupOnMeteredNetwork,
     int ScanThrottleMilliseconds,
     long DailyUploadLimitBytes,
     string UpdatedByAdminId,
@@ -44,6 +45,7 @@ public record UpdateDeviceSecurityPolicyDto(
     int MaxVersionsPerFile,
     bool ResourceThrottlingEnabled,
     bool PauseBackupOnBattery,
+    bool? PauseBackupOnMeteredNetwork,
     int ScanThrottleMilliseconds,
     long DailyUploadLimitBytes);
 

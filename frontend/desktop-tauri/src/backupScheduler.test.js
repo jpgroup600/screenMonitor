@@ -19,7 +19,7 @@ describe("backup scheduler", () => {
   it("processes only the server-approved inventory queue", async () => {
     const native = { loadAuthToken: vi.fn().mockResolvedValue("token-1"), processInventoryBackup: vi.fn().mockResolvedValue({ uploadedFiles: 3 }) };
     const storage = { getItem: vi.fn((key) => ({ token: "token-1", screenMonitorDeviceId: "device-1" })[key]) };
-    await runBackupQueueCycle({ native, storage, policy: { resourceThrottlingEnabled: true, pauseBackupOnBattery: true, dailyUploadLimitBytes: 123 } });
-    expect(native.processInventoryBackup).toHaveBeenCalledWith("token-1", "device-1", { resourceThrottlingEnabled: true, pauseBackupOnBattery: true, dailyUploadLimitBytes: 123 });
+    await runBackupQueueCycle({ native, storage, policy: { resourceThrottlingEnabled: true, pauseBackupOnBattery: true, pauseBackupOnMeteredNetwork: true, dailyUploadLimitBytes: 123 } });
+    expect(native.processInventoryBackup).toHaveBeenCalledWith("token-1", "device-1", { resourceThrottlingEnabled: true, pauseBackupOnBattery: true, pauseBackupOnMeteredNetwork: true, dailyUploadLimitBytes: 123 });
   });
 });

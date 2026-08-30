@@ -18,6 +18,7 @@ export async function runBackupQueueCycle({ native, storage, policy }) {
   return native.processInventoryBackup(token, deviceId, {
     resourceThrottlingEnabled: Boolean(policy?.resourceThrottlingEnabled),
     pauseBackupOnBattery: Boolean(policy?.pauseBackupOnBattery),
+    pauseBackupOnMeteredNetwork: Boolean(policy?.pauseBackupOnMeteredNetwork),
     dailyUploadLimitBytes: Number(policy?.dailyUploadLimitBytes || 10 * 1024 ** 3),
   });
 }

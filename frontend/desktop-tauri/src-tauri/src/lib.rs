@@ -671,10 +671,22 @@ async fn process_inventory_backup(
     device_id: String,
     resource_throttling_enabled: bool,
     pause_backup_on_battery: bool,
+    pause_backup_on_metered_network: bool,
     daily_upload_limit_bytes: u64,
     state: State<'_, AppState>,
 ) -> Result<IncrementalBackupResult, String> {
-    if resource_throttling_enabled && pause_backup_on_battery && platform::on_battery() {
+    let on_battery =
+        resource_throttling_enabled && pause_backup_on_battery && platform::on_battery();
+    let on_metered_network = resource_throttling_enabled
+        && pause_backup_on_metered_network
+        && platform::metered_network();
+    if resource_policy_pauses_backup(
+        resource_throttling_enabled,
+        pause_backup_on_battery,
+        on_battery,
+        pause_backup_on_metered_network,
+        on_metered_network,
+    ) {
         return Ok(IncrementalBackupResult {
             scanned_files: 0,
             changed_files: 0,
@@ -809,6 +821,38 @@ async fn process_inventory_backup(
         skipped_entries: 0,
         inaccessible_entries: 0,
     })
+}
+
+fn resource_policy_pauses_backup(
+    enabled: bool,
+    pause_on_battery: bool,
+    on_battery: bool,
+    pause_on_metered_network: bool,
+    on_metered_network: bool,
+) -> bool {
+    enabled
+        && ((pause_on_battery && on_battery) || (pause_on_metered_network && on_metered_network))
+}
+
+#[cfg(test)]
+mod resource_policy_tests {
+    use super::resource_policy_pauses_backup;
+
+    #[test]
+    fn battery_and_metered_network_pause_independently() {
+        assert!(resource_policy_pauses_backup(
+            true, true, true, false, false
+        ));
+        assert!(resource_policy_pauses_backup(
+            true, false, false, true, true
+        ));
+        assert!(!resource_policy_pauses_backup(
+            true, false, true, false, true
+        ));
+        assert!(!resource_policy_pauses_backup(
+            false, true, true, true, true
+        ));
+    }
 }
 
 fn backup_file_is_stable(
