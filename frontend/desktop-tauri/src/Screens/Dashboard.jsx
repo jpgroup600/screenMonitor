@@ -10,8 +10,9 @@ import { diffRemovableDrives, recordUsbChanges } from "../usbAudit";
 import { diffUsbFiles, recordUsbFileCopies } from "../usbFileAudit";
 import { BACKUP_INITIAL_DELAY_MS, BACKUP_INTERVAL_MS, runBackupCycle, runBackupQueueCycle } from "../backupScheduler";
 import { loadDeviceSecurityPolicy, sameDeviceSecurityPolicy } from "../deviceSecurityPolicy";
+import { removeAuthToken } from "../authToken";
 
-const Dashboard = () => {
+const Dashboard = ({ token, setToken }) => {
   const [attendance, setAttendance] = useState(null);
   const [attendanceLoaded, setAttendanceLoaded] = useState(false);
   const [projects, setProjects] = useState([]);
@@ -83,7 +84,6 @@ const Dashboard = () => {
         const next = await loadDeviceSecurityPolicy({ request, storage: localStorage });
         setSecurityPolicy((current) => {
           if (sameDeviceSecurityPolicy(current, next)) return current;
-          const token = localStorage.getItem('token');
           if (next.monitoringEnabled) native.startAttendanceMonitoring(token, next).catch(console.error);
           else native.stopMonitoring().catch(console.error);
           return next;
@@ -132,7 +132,7 @@ const Dashboard = () => {
           restore: async () => {
             const policy = await loadDeviceSecurityPolicy({ request, storage: localStorage });
             setSecurityPolicy(policy);
-            return restoreAttendanceMonitoring({ request, native, token: localStorage.getItem("token"), policy });
+            return restoreAttendanceMonitoring({ request, native, token, policy });
           },
         });
         setAttendance(current || null);
@@ -185,7 +185,8 @@ const Dashboard = () => {
     await request.post("/session/monitoring/end", {}).catch(console.error);
     await native.stopMonitoring().catch(console.error);
     localStorage.removeItem("userId");
-    localStorage.removeItem("token");
+    await removeAuthToken({ native, storage: localStorage });
+    setToken(null);
     navigate("/");
     window.location.reload();
   };

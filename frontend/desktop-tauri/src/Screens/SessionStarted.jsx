@@ -3,6 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import request from "../Actions/request";
 import { FaSignOutAlt, FaStop } from "react-icons/fa";
 import { native } from "../native";
+import { loadDeviceSecurityPolicy } from "../deviceSecurityPolicy";
 
 const SessionStarted = () => {
   const location = useLocation();
@@ -17,7 +18,8 @@ const SessionStarted = () => {
       console.log("Session end response:", response);
       await request.post("/session/monitoring/ensure", {});
       await native.stopMonitoring();
-      await native.startAttendanceMonitoring(localStorage.getItem("token"));
+      const policy = await loadDeviceSecurityPolicy({ request, storage: localStorage });
+      await native.startAttendanceMonitoring(await native.loadAuthToken(), policy);
       navigate("/");
     } catch (error) {
       console.error("Failed to end session:", error);

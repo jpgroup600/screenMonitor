@@ -1,4 +1,5 @@
 mod api;
+mod auth_token;
 mod backup_inventory;
 mod backup_manifest;
 mod backup_policy;
@@ -53,6 +54,7 @@ struct AppState {
     service_spool: Arc<ServiceSpool>,
     upload_budget: upload_budget::UploadBudget,
     service_backups: Arc<ServiceBackupQueue>,
+    auth_token_store: auth_token::AuthTokenStore,
 }
 
 impl AppState {
@@ -78,6 +80,10 @@ impl AppState {
             .parent()
             .ok_or("Invalid application data directory")?
             .join("daily-upload-usage.dat");
+        let auth_token_path = queue_directory
+            .parent()
+            .ok_or("Invalid application data directory")?
+            .join("auth-token.dat");
         Ok(Self {
             session: Mutex::new(None),
             reminder: Mutex::new(None),
@@ -93,6 +99,7 @@ impl AppState {
             service_backups: Arc::new(ServiceBackupQueue::new(
                 shared_directory.join("service-backups"),
             )?),
+            auth_token_store: auth_token::AuthTokenStore::new(auth_token_path),
         })
     }
 
@@ -107,6 +114,35 @@ impl AppState {
         }
         .save(&self.service_config_path)
     }
+}
+
+#[tauri::command]
+fn store_auth_token(token: String, state: State<'_, AppState>) -> Result<(), String> {
+    state.auth_token_store.save(&token)?;
+    *state.token.lock().map_err(|error| error.to_string())? = Some(token);
+    Ok(())
+}
+
+#[tauri::command]
+fn load_auth_token(state: State<'_, AppState>) -> Result<Option<String>, String> {
+    if let Some(token) = state
+        .token
+        .lock()
+        .map_err(|error| error.to_string())?
+        .clone()
+    {
+        return Ok(Some(token));
+    }
+    let token = state.auth_token_store.load()?;
+    *state.token.lock().map_err(|error| error.to_string())? = token.clone();
+    Ok(token)
+}
+
+#[tauri::command]
+fn clear_auth_token(state: State<'_, AppState>) -> Result<(), String> {
+    state.auth_token_store.clear()?;
+    *state.token.lock().map_err(|error| error.to_string())? = None;
+    Ok(())
 }
 
 struct ReminderSession {
@@ -933,7 +969,10 @@ pub fn run() {
             capture_screenshot,
             start_attendance_reminders,
             stop_attendance_reminders,
-            agent_status
+            agent_status,
+            store_auth_token,
+            load_auth_token,
+            clear_auth_token
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {

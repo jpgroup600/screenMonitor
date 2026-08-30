@@ -2,8 +2,10 @@
 import React, { useState } from "react";
 import request from "../Actions/request";
 import {useNavigate} from 'react-router-dom'
+import { native } from '../native';
+import { saveAuthToken } from '../authToken';
 
-export default function Login() {
+export default function Login({ setToken }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -22,11 +24,10 @@ export default function Login() {
         const token = response.token;
         const userId = response.userId;
 
-        localStorage.setItem("token", token);
+        await saveAuthToken({ native, storage: localStorage, token });
         localStorage.setItem("userId", userId);
+        setToken(token);
         navigate("/dashboard");
-
-        window.location.reload();
       } else {
         setError("Login failed. Please check your credentials.");
         console.log(response)

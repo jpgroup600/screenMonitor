@@ -6,14 +6,22 @@ import Dashboard from './Screens/Dashboard';
 import SessionStarted from './Screens/SessionStarted';
 import CustomTitleBar from './Components/CustomTitleBar';
 import { native } from './native';
+import { initializeAuthToken } from './authToken';
 
 const App = () => {
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(null);
   const [connection, setConnection] = useState(null); // useractivityhub connection
   const [screenHubConnection, setScreenHubConnection] = useState(null); // screenhub connection
   const [loading, setLoading] = useState(true);
 
   const hubURL = import.meta.env.VITE_HUB_URL;
+
+  useEffect(() => {
+    initializeAuthToken({ native, storage: localStorage })
+      .then((value) => setToken(value || null))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
     const connectUserActivityHub = async () => {
@@ -54,7 +62,6 @@ const App = () => {
 
     const connectAll = async () => {
       await Promise.all([connectUserActivityHub()]);
-      setLoading(false);
     };
 
     connectAll();
@@ -98,7 +105,7 @@ const App = () => {
             path="/dashboard"
             element={
               token ? (
-                <Dashboard connection={connection} screenHub={screenHubConnection} />
+                <Dashboard connection={connection} screenHub={screenHubConnection} token={token} setToken={setToken} />
               ) : (
                 <Navigate to="/" replace />
               )

@@ -1,5 +1,6 @@
 // src/request.js
 import axios from 'axios';
+import { native } from '../native';
 
 const baseURL = import.meta.env.VITE_BACKEND_URL;
 
@@ -10,10 +11,8 @@ const axiosInstance = axios.create({
 
 // Optional: Add an interceptor to attach an authorization token to every request.
 axiosInstance.interceptors.request.use(
-  (config) => {
-    // Retrieve your token here. Replace the following hard-coded token
-    // with your actual token retrieval logic (e.g., from localStorage or secure storage).
-    const token = localStorage.getItem('token');
+  async (config) => {
+    const token = await native.loadAuthToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
