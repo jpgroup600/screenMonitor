@@ -255,6 +255,8 @@
 ## 관련 문서
 
 - [엔드포인트 백업·보안 기능 제안서](./endpoint-backup-security-proposal.md)
+- [제안서 구현 검증표](./proposal-completion-matrix.md)
+- [Windows 서비스·설치 검증 현황](./windows-service-status.md)
 - [Tauri 데스크톱 실행 안내](../frontend/desktop-tauri/README.md)
 
 ## 2026-08-30 관리자 검증 화면 배포
