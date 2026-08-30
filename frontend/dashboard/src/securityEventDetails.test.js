@@ -30,3 +30,12 @@ test('formats USB identity, BitLocker and file hash evidence', () => {
 test('ignores malformed legacy details without breaking the event list', () => {
   assert.deepEqual(securityEventDetailRows('not-json'), []);
 });
+
+test('shows a cautious network channel classification', () => {
+  const rows = securityEventDetailRows(JSON.stringify({
+    processId: 42, processName: 'chrome.exe', channel: 'Browser', confirmedFileTransfer: false,
+  }));
+  assert.deepEqual(rows, [
+    ['Process', 'chrome.exe'], ['Channel', 'Browser'], ['Confirmed transfer', 'false'],
+  ]);
+});

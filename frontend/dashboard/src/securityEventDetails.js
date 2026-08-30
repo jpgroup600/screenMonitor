@@ -25,6 +25,9 @@ export function securityEventDetailRows(details) {
     ['Size', present(value.sizeBytes) ? `${Number(value.sizeBytes).toLocaleString()} bytes` : null],
     ['SHA-256', value.sha256],
     ['Destination', value.destination],
+    ['Process', value.processName || (present(value.processId) ? `PID ${value.processId}` : null)],
+    ['Channel', value.channel],
+    ['Confirmed transfer', typeof value.confirmedFileTransfer === 'boolean' ? String(value.confirmedFileTransfer) : null],
     ['Evidence', value.evidenceError || value.evidence],
   ];
   return fields.filter(([, fieldValue]) => present(fieldValue));

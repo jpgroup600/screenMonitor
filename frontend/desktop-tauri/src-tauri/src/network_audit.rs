@@ -16,6 +16,51 @@ pub fn detect_new(
     current.difference(previous).cloned().collect()
 }
 
+pub fn classify_channel(process_name: Option<&str>, remote_port: u16) -> &'static str {
+    let process = process_name.unwrap_or_default().to_ascii_lowercase();
+    if remote_port == 445 {
+        return "NetworkShare";
+    }
+    if matches!(remote_port, 21 | 22 | 990)
+        || matches!(
+            process.as_str(),
+            "filezilla.exe" | "winscp.exe" | "ftp.exe" | "sftp.exe"
+        )
+    {
+        return "FileTransfer";
+    }
+    if remote_port == 3389 || process == "mstsc.exe" {
+        return "RemoteDesktop";
+    }
+    if matches!(
+        process.as_str(),
+        "onedrive.exe" | "dropbox.exe" | "googledrivefs.exe" | "icloud.exe"
+    ) {
+        return "CloudSync";
+    }
+    if matches!(process.as_str(), "outlook.exe" | "thunderbird.exe") {
+        return "EmailClient";
+    }
+    if matches!(
+        process.as_str(),
+        "teams.exe"
+            | "ms-teams.exe"
+            | "slack.exe"
+            | "kakaotalk.exe"
+            | "discord.exe"
+            | "telegram.exe"
+    ) {
+        return "Messaging";
+    }
+    if matches!(
+        process.as_str(),
+        "chrome.exe" | "msedge.exe" | "firefox.exe" | "brave.exe" | "opera.exe"
+    ) {
+        return "Browser";
+    }
+    "OtherExternalConnection"
+}
+
 pub fn established_external_connections() -> Result<HashSet<ExternalConnection>, String> {
     #[cfg(windows)]
     let output = {
@@ -127,5 +172,14 @@ mod tests {
             remote_port: 443,
             process_id: 42
         }));
+    }
+
+    #[test]
+    fn classifies_network_channels_without_claiming_a_file_transfer() {
+        assert_eq!(classify_channel(Some("chrome.exe"), 443), "Browser");
+        assert_eq!(classify_channel(Some("OneDrive.exe"), 443), "CloudSync");
+        assert_eq!(classify_channel(Some("unknown.exe"), 445), "NetworkShare");
+        assert_eq!(classify_channel(Some("WinSCP.exe"), 443), "FileTransfer");
+        assert_eq!(classify_channel(None, 443), "OtherExternalConnection");
     }
 }

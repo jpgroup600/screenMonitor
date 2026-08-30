@@ -36,9 +36,41 @@ pub fn active_application() -> String {
     }
 }
 
+#[cfg(windows)]
+pub fn process_name(process_id: u32) -> Option<String> {
+    use std::path::Path;
+    use windows_sys::Win32::Foundation::CloseHandle;
+    use windows_sys::Win32::System::Threading::{
+        OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    unsafe {
+        let process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, process_id);
+        if process.is_null() {
+            return None;
+        }
+        let mut buffer = vec![0u16; 1024];
+        let mut size = buffer.len() as u32;
+        let ok = QueryFullProcessImageNameW(process, 0, buffer.as_mut_ptr(), &mut size);
+        CloseHandle(process);
+        if ok == 0 {
+            return None;
+        }
+        let value = String::from_utf16_lossy(&buffer[..size as usize]);
+        Path::new(&value)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(str::to_owned)
+    }
+}
+
 #[cfg(not(windows))]
 pub fn active_application() -> String {
     "unknown".into()
+}
+
+#[cfg(not(windows))]
+pub fn process_name(_process_id: u32) -> Option<String> {
+    None
 }
 
 #[cfg(windows)]

@@ -1,5 +1,14 @@
 # Screen Monitor 작업 현황
 
+## 2026-08-31 외부 네트워크 채널 분류
+
+- Windows 서비스가 신규 외부 TCP 연결의 PID를 실행 파일 이름으로 조회
+- 프로세스와 포트를 근거로 `Browser`, `CloudSync`, `EmailClient`, `Messaging`, `FileTransfer`, `NetworkShare`, `RemoteDesktop`, 기타 외부 연결로 분류
+- 채널 분류는 연결 근거일 뿐 실제 파일 전송 확정이 아니며 모든 이벤트에 `confirmedFileTransfer: false` 유지
+- 관리자 보안 이벤트 상세에 프로세스, 채널과 전송 확정 여부 표시
+- 검증: Rust 69개, 관리자 18개 테스트와 관리자 프로덕션 빌드 통과
+- 한계: 브라우저 탭·업로드 파일·전송 바이트 상관관계, Bluetooth와 인쇄는 OS 연결 목록만으로 확인할 수 없어 Endpoint DLP 연동 범위로 유지
+
 ## 2026-08-31 USB 반출 위험도 분석
 
 - 장치별 관리자 정책에 `USB 반출 위험도 분석` 독립 스위치 추가, 기본값 ON이며 이전 관리자 요청이 필드를 생략해도 ON 유지

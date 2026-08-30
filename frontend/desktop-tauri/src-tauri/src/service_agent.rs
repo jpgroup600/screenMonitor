@@ -169,7 +169,9 @@ async fn collect(
                     if let Some(previous) = &network_baseline {
                         for connection in crate::network_audit::detect_new(previous, &current).into_iter().take(100) {
                             let source = format!("{}:{}", connection.remote_address, connection.remote_port);
-                            let details = serde_json::json!({"processId":connection.process_id,"evidence":"windows_service_new_external_tcp_connection","confirmedFileTransfer":false}).to_string();
+                            let process_name = crate::platform::process_name(connection.process_id);
+                            let channel = crate::network_audit::classify_channel(process_name.as_deref(), connection.remote_port);
+                            let details = serde_json::json!({"processId":connection.process_id,"processName":process_name,"channel":channel,"evidence":"windows_service_new_external_tcp_connection","confirmedFileTransfer":false}).to_string();
                             let _ = spool.enqueue(&ServiceEvent::new("NETWORK_CONNECTION", source, details));
                         }
                     }
