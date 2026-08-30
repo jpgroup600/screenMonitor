@@ -47,6 +47,46 @@ public class BackupInventoryServiceTests
         Assert.Equal("Completed", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
     }
 
+    [Fact]
+    public async Task Changing_rules_does_not_reset_terminal_backup_results()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        var run = await service.StartAsync("employee-1", "device-1");
+        await service.AddBatchAsync(run.Id, "employee-1", new[] {
+            new InventoryEntry(@"C:\Work\done.txt", 1, 1),
+            new InventoryEntry(@"C:\Work\waiting.txt", 2, 2) });
+        await service.CompleteInventoryAsync(run.Id, "employee-1");
+        Assert.True(await service.StartBackupAsync(run.Id));
+        var done = (await service.PendingItemsAsync(run.Id, "employee-1", "device-1", 1)).Single();
+        Assert.True(await service.RecordResultAsync(done.Id, "employee-1", "device-1", true, null));
+
+        await service.SetRuleAsync("device-1", @"C:\Work", "Exclude");
+
+        var rows = await db.BackupInventoryItems.OrderBy(x => x.Path).ToListAsync();
+        Assert.Equal("BackedUp", rows.Single(x => x.Id == done.Id).Status);
+        Assert.Equal("Excluded", rows.Single(x => x.Id != done.Id).Status);
+    }
+
+    [Fact]
+    public async Task Bulk_rules_are_applied_to_all_selected_paths_in_one_operation()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        var run = await service.StartAsync("employee-1", "device-1");
+        await service.AddBatchAsync(run.Id, "employee-1", new[] {
+            new InventoryEntry(@"C:\Work\a.txt", 1, 1),
+            new InventoryEntry(@"C:\Work\b.txt", 2, 2),
+            new InventoryEntry(@"C:\Work\c.txt", 3, 3) });
+        await service.CompleteInventoryAsync(run.Id, "employee-1");
+
+        Assert.Equal(2, await service.SetRulesAsync("device-1", new[] { @"C:\Work\a.txt", @"C:\Work\b.txt" }, "Exclude"));
+
+        var rows = await db.BackupInventoryItems.OrderBy(x => x.Path).ToListAsync();
+        Assert.Equal(new[] { "Excluded", "Excluded", "Pending" }, rows.Select(x => x.Status));
+        Assert.Equal(2, await db.BackupPathRules.CountAsync());
+    }
+
     private static User Employee() => new() { Id = "employee-1", FullName = "Employee", Email = "e@example.com", PasswordHash = "hash", Role = "Employee", Designation = "", PhoneNumber = "" };
     private static SmDbContext CreateDb() => new(new DbContextOptionsBuilder<SmDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 }

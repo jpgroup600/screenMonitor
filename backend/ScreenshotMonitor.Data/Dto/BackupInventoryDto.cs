@@ -11,4 +11,5 @@ public record InventoryProgressDto(string RunId, string Status, int Total, int P
 public record InventoryItemDto(string Id, string RunId, string Path, long SizeBytes, long? ModifiedUnixSeconds, string Status, string? Error, DateTime DiscoveredAt, DateTime? BackedUpAt);
 public record BackupPathRuleDto(string Id, string DeviceId, string Path, string Action, DateTime CreatedAt);
 public record SetBackupPathRuleDto(string DeviceId, string Path, string Action);
+public record SetBackupPathRulesDto(string DeviceId, IReadOnlyList<string> Paths, string Action);
 public record InventoryItemResultDto(bool Succeeded, string? Error);

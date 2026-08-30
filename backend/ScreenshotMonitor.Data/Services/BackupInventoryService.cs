@@ -58,6 +58,28 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         await db.SaveChangesAsync(); return rule;
     }
 
+    public async Task<int> SetRulesAsync(string deviceId, IEnumerable<string> paths, string action)
+    {
+        if (action is not ("Include" or "Exclude")) throw new ArgumentException("Action must be Include or Exclude.");
+        if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentException("DeviceId is required.");
+        var normalizedPaths = paths.Select(x => x?.Trim().TrimEnd('\\', '/'))
+            .Where(x => !string.IsNullOrWhiteSpace(x)).Cast<string>().Distinct(StringComparer.OrdinalIgnoreCase).Take(500).ToList();
+        if (normalizedPaths.Count == 0) throw new ArgumentException("At least one path is required.");
+        var existing = await db.BackupPathRules.Where(x => x.DeviceId == deviceId && normalizedPaths.Contains(x.Path)).ToListAsync();
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        foreach (var path in normalizedPaths)
+        {
+            var rule = existing.FirstOrDefault(x => x.Path.Equals(path, StringComparison.OrdinalIgnoreCase));
+            if (rule is null) { rule = new BackupPathRule { DeviceId = deviceId, Path = path }; db.BackupPathRules.Add(rule); }
+            rule.Action = action; rule.CreatedAt = now;
+        }
+        await db.SaveChangesAsync();
+        foreach (var run in await db.BackupInventoryRuns.Where(x => x.DeviceId == deviceId && (x.Status == "InventoryReady" || x.Status == "BackingUp")).ToListAsync())
+            await ApplyRulesAsync(run);
+        await db.SaveChangesAsync();
+        return normalizedPaths.Count;
+    }
+
     public async Task<bool> StartBackupAsync(string runId)
     {
         var run = await db.BackupInventoryRuns.FirstOrDefaultAsync(x => x.Id == runId && x.Status == "InventoryReady");
@@ -120,6 +142,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         var items = await db.BackupInventoryItems.Where(x => x.RunId == run.Id).ToListAsync();
         foreach (var item in items)
         {
+            if (item.Status is not ("Pending" or "Excluded")) continue;
             var rule = rules.Where(x => IsWithin(item.Path, x.Path)).OrderByDescending(x => x.Path.Length).FirstOrDefault();
             item.Status = rule?.Action == "Exclude" ? "Excluded" : "Pending";
         }

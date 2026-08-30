@@ -134,6 +134,13 @@ public class BackupsController(BackupService service, BackupRestoreService resto
         catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
     }
 
+    [Authorize(Roles = "Admin"), HttpPut("inventory/rules/bulk")]
+    public async Task<ActionResult> SetInventoryRules(SetBackupPathRulesDto request)
+    {
+        try { return Ok(new { updated = await inventoryService.SetRulesAsync(request.DeviceId, request.Paths, request.Action) }); }
+        catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
+    }
+
     private static InventoryRunDto ToInventoryRun(ScreenshotMonitor.Data.Entities.BackupInventoryRun value) =>
         new(value.Id, value.EmployeeId, value.Employee?.FullName ?? "", value.DeviceId, value.Status, value.StartedAt, value.InventoryCompletedAt, value.BackupCompletedAt);
     private static BackupPathRuleDto ToRule(ScreenshotMonitor.Data.Entities.BackupPathRule value) =>
