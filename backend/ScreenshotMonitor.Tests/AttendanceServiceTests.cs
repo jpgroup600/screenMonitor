@@ -150,6 +150,36 @@ public class AttendanceServiceTests
         Assert.Equal(TimeSpan.FromHours(7), report.Records[0].ProductiveDuration);
     }
 
+    [Fact]
+    public async Task Four_am_cutoff_closes_only_attendance_started_before_the_latest_seoul_cutoff()
+    {
+        await using var db = CreateDb();
+        var now = new DateTimeOffset(2026, 8, 30, 5, 0, 0, TimeSpan.FromHours(9));
+        var cutoff = AttendanceService.LatestSeoulFourAmCutoff(now.ToUniversalTime());
+        db.AttendanceRecords.AddRange(
+            new AttendanceRecord { Id = "old", EmployeeId = "employee-1", ClockInAt = cutoff.AddHours(-3), Status = "Active" },
+            new AttendanceRecord { Id = "new", EmployeeId = "employee-2", ClockInAt = cutoff.AddMinutes(1), Status = "Active" });
+        db.Sessions.Add(new Session { Id = "monitoring", EmployeeId = "employee-1", StartTime = cutoff.AddHours(-3), Status = "Active" });
+        await db.SaveChangesAsync();
+        var service = new AttendanceService(db, new FakeTimeProvider(now));
+
+        Assert.Equal(1, await service.AutoCloseBeforeAsync(cutoff));
+
+        Assert.Equal("Complete", (await db.AttendanceRecords.FindAsync("old"))!.Status);
+        Assert.Equal(cutoff, (await db.AttendanceRecords.FindAsync("old"))!.ClockOutAt);
+        Assert.Equal("Active", (await db.AttendanceRecords.FindAsync("new"))!.Status);
+        Assert.Equal("Active", (await db.Sessions.FindAsync("monitoring"))!.Status);
+    }
+
+    [Theory]
+    [InlineData("2026-08-30T03:59:00+09:00", "2026-08-28T19:00:00Z")]
+    [InlineData("2026-08-30T04:00:00+09:00", "2026-08-29T19:00:00Z")]
+    public void Latest_cutoff_uses_four_am_in_seoul(string now, string expectedUtc)
+    {
+        Assert.Equal(DateTimeOffset.Parse(expectedUtc).UtcDateTime,
+            AttendanceService.LatestSeoulFourAmCutoff(DateTimeOffset.Parse(now).ToUniversalTime()));
+    }
+
     private static SmDbContext CreateDb()
     {
         var options = new DbContextOptionsBuilder<SmDbContext>()

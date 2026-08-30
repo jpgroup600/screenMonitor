@@ -41,6 +41,7 @@ builder.Services.AddScoped<IScreenshotRepository, ScreenshotRepository>();
 builder.Services.AddScoped<IDashboardRepository, DashboardRepository>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<AttendanceService>();
+builder.Services.AddHostedService<AttendanceAutoCloseWorker>();
 builder.Services.AddScoped<DeviceService>();
 builder.Services.AddScoped<SecurityEventService>();
 builder.Services.AddScoped<BackupRestoreService>();

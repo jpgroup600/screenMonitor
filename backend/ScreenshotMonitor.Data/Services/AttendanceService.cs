@@ -77,6 +77,36 @@ public class AttendanceService(SmDbContext dbContext, TimeProvider timeProvider)
         return true;
     }
 
+    public async Task<int> AutoCloseBeforeAsync(DateTime cutoffUtc)
+    {
+        cutoffUtc = cutoffUtc.ToUniversalTime();
+        var records = await dbContext.AttendanceRecords.Include(x => x.IdlePeriods)
+            .Where(x => x.Status == "Active" && x.ClockInAt < cutoffUtc).ToListAsync();
+        foreach (var record in records)
+        {
+            var openIdle = record.IdlePeriods.FirstOrDefault(x => x.EndedAt == null);
+            if (openIdle is not null && openIdle.StartedAt >= cutoffUtc)
+            {
+                dbContext.AttendanceIdlePeriods.Remove(openIdle);
+            }
+            else
+            {
+                CloseIdlePeriod(record, cutoffUtc);
+            }
+            record.ClockOutAt = cutoffUtc;
+            record.Status = "Complete";
+        }
+        if (records.Count > 0) await dbContext.SaveChangesAsync();
+        return records.Count;
+    }
+
+    public static DateTime LatestSeoulFourAmCutoff(DateTimeOffset nowUtc)
+    {
+        var seoul = nowUtc.ToOffset(TimeSpan.FromHours(9));
+        var date = seoul.TimeOfDay >= TimeSpan.FromHours(4) ? seoul.Date : seoul.Date.AddDays(-1);
+        return new DateTimeOffset(date.AddHours(4), TimeSpan.FromHours(9)).UtcDateTime;
+    }
+
     public Task<List<AttendanceRecord>> HistoryAsync(string employeeId, int take) =>
         dbContext.AttendanceRecords.AsNoTracking()
             .Where(x => x.EmployeeId == employeeId)
