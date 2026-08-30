@@ -16,7 +16,7 @@ use std::{
     time::Duration,
 };
 
-const SERVICE_EVENT_RETRY_BATCH_SIZE: usize = 100;
+const SERVICE_EVENT_RETRY_BATCH_SIZE: usize = 10;
 use tokio::sync::Mutex;
 
 pub struct MonitorSession {
@@ -404,6 +404,36 @@ mod tests {
         .unwrap();
 
         assert_eq!(spool.pending().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn service_spool_default_retry_uses_safe_production_batch() {
+        let server = MockServer::start();
+        let _accepted = server.mock(|when, then| {
+            when.method(POST).path("/api/security-events");
+            then.status(200);
+        });
+        let directory = tempfile::tempdir().unwrap();
+        let spool = ServiceSpool::new(directory.path().to_path_buf()).unwrap();
+        for index in 0..12 {
+            spool
+                .enqueue(&crate::service_spool::ServiceEvent::new(
+                    "FILE_MODIFIED",
+                    format!(r"C:\Work\safe-batch-{index}.txt"),
+                    "{}".into(),
+                ))
+                .unwrap();
+        }
+
+        retry_service_events(
+            &ApiClient::new(format!("{}/api", server.base_url()), "token".into()),
+            &spool,
+            "device-1",
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(spool.pending().unwrap().len(), 2);
     }
 
     #[tokio::test]
