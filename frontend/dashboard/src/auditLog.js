@@ -6,6 +6,7 @@ export function auditActionLabel(action) {
     INVENTORY_BACKUP_STARTED: '파일 백업 시작',
     BACKUP_PATH_RULE_UPDATED: '파일 백업 규칙 변경',
     BACKUP_PATH_RULES_BULK_UPDATED: '파일 백업 규칙 일괄 변경',
+    BACKUP_RETENTION_APPLIED: '백업 보존 정책 자동 적용',
   })[action] || action;
 }
 

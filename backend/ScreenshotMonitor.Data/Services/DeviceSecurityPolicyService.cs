@@ -31,6 +31,7 @@ public class DeviceSecurityPolicyService(SmDbContext db, TimeProvider timeProvid
 
     public async Task<DeviceSecurityPolicy> UpdateAsync(string adminId, string deviceId, UpdateDeviceSecurityPolicyDto update)
     {
+        Validate(update);
         if (!await db.Devices.AnyAsync(x => x.Id == deviceId)) throw new KeyNotFoundException("Device was not found.");
         var policy = await db.DeviceSecurityPolicies.FirstOrDefaultAsync(x => x.DeviceId == deviceId);
         var before = Snapshot(policy ?? Default(deviceId));
@@ -66,11 +67,25 @@ public class DeviceSecurityPolicyService(SmDbContext db, TimeProvider timeProvid
         policy.FileChangeAuditEnabled = value.FileChangeAuditEnabled;
         policy.AttendanceRemindersEnabled = value.AttendanceRemindersEnabled;
         policy.RestoreEnabled = value.RestoreEnabled;
+        policy.RetentionEnabled = value.RetentionEnabled;
+        policy.RetentionDays = value.RetentionDays;
+        policy.MaxBackupBytes = value.MaxBackupBytes;
+        policy.MaxVersionsPerFile = value.MaxVersionsPerFile;
+    }
+
+    private static void Validate(UpdateDeviceSecurityPolicyDto value)
+    {
+        if (value.RetentionDays is < 1 or > 3650) throw new ArgumentException("RetentionDays must be between 1 and 3650.");
+        if (value.MaxBackupBytes is < 1024 * 1024 or > 10L * 1024 * 1024 * 1024 * 1024)
+            throw new ArgumentException("MaxBackupBytes must be between 1 MB and 10 TB.");
+        if (value.MaxVersionsPerFile is < 1 or > 1000)
+            throw new ArgumentException("MaxVersionsPerFile must be between 1 and 1000.");
     }
 
     internal static string Snapshot(DeviceSecurityPolicy value) => JsonSerializer.Serialize(new {
         value.MonitoringEnabled, value.ScreenshotsEnabled, value.ActiveAppTrackingEnabled, value.IdleTrackingEnabled,
         value.BackupEnabled, value.UsbAuditEnabled, value.NetworkAuditEnabled, value.FileChangeAuditEnabled,
-        value.AttendanceRemindersEnabled, value.RestoreEnabled
+        value.AttendanceRemindersEnabled, value.RestoreEnabled, value.RetentionEnabled,
+        value.RetentionDays, value.MaxBackupBytes, value.MaxVersionsPerFile
     });
 }

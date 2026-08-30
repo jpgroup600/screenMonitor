@@ -9,6 +9,7 @@ export const securityPolicyModules = [
   ['fileChangeAuditEnabled', '파일 변경 감사', '파일 생성·수정·이동·삭제 기록'],
   ['attendanceRemindersEnabled', '출근 알림', '미출근 상태에서 10분 간격 알림'],
   ['restoreEnabled', '원격 복원', '관리자가 요청한 백업 버전을 원본 PC에 복원'],
+  ['retentionEnabled', '백업 자동 정리', '보존 기간·장치 용량·파일별 버전 수에 따라 오래된 백업 정리'],
 ];
 
 export function updateSecurityPolicy(policy, key, enabled) {
@@ -17,5 +18,15 @@ export function updateSecurityPolicy(policy, key, enabled) {
 }
 
 export function securityPolicyPayload(policy) {
-  return Object.fromEntries(securityPolicyModules.map(([key]) => [key, Boolean(policy[key])]));
+  return {
+    ...Object.fromEntries(securityPolicyModules.map(([key]) => [key, Boolean(policy[key])])),
+    retentionDays: boundedInteger(policy.retentionDays, 1, 3650, 90),
+    maxBackupBytes: boundedInteger(policy.maxBackupBytes, 1024 * 1024, 10 * 1024 ** 4, 50 * 1024 ** 3),
+    maxVersionsPerFile: boundedInteger(policy.maxVersionsPerFile, 1, 1000, 20),
+  };
+}
+
+function boundedInteger(value, minimum, maximum, fallback) {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= minimum && parsed <= maximum ? parsed : fallback;
 }

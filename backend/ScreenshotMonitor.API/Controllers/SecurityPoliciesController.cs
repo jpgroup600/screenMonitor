@@ -32,6 +32,7 @@ public class SecurityPoliciesController(DeviceSecurityPolicyService service) : C
     {
         try { return Ok(ToDto(await service.UpdateAsync(UserId, deviceId, request))); }
         catch (KeyNotFoundException) { return NotFound(); }
+        catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
     }
 
     [Authorize(Roles = "Admin"), HttpGet("audit")]
@@ -47,5 +48,6 @@ public class SecurityPoliciesController(DeviceSecurityPolicyService service) : C
         value.DeviceId, value.MonitoringEnabled, value.ScreenshotsEnabled, value.ActiveAppTrackingEnabled,
         value.IdleTrackingEnabled, value.BackupEnabled, value.UsbAuditEnabled, value.NetworkAuditEnabled,
         value.FileChangeAuditEnabled, value.AttendanceRemindersEnabled, value.RestoreEnabled,
+        value.RetentionEnabled, value.RetentionDays, value.MaxBackupBytes, value.MaxVersionsPerFile,
         value.UpdatedByAdminId, value.UpdatedAt);
 }

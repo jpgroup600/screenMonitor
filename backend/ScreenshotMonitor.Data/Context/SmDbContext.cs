@@ -112,6 +112,7 @@ namespace ScreenshotMonitor.Data.Context
             modelBuilder.Entity<DeviceSecurityPolicy>().HasIndex(x => x.DeviceId).IsUnique();
             modelBuilder.Entity<AdminAuditLog>().HasIndex(x => x.OccurredAt);
             modelBuilder.Entity<AdminAuditLog>().HasIndex(x => x.Sequence).IsUnique();
+            modelBuilder.Entity<StorageDeletionJob>().HasIndex(x => x.ObjectKey).IsUnique();
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -156,5 +157,6 @@ namespace ScreenshotMonitor.Data.Context
         public DbSet<BackupPathRule> BackupPathRules { get; set; }
         public DbSet<DeviceSecurityPolicy> DeviceSecurityPolicies { get; set; }
         public DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
+        public DbSet<StorageDeletionJob> StorageDeletionJobs { get; set; }
     }
 }

@@ -19,6 +19,10 @@ public class DeviceSecurityPolicy
     public bool FileChangeAuditEnabled { get; set; } = true;
     public bool AttendanceRemindersEnabled { get; set; } = true;
     public bool RestoreEnabled { get; set; } = true;
+    public bool RetentionEnabled { get; set; }
+    public int RetentionDays { get; set; } = 90;
+    public long MaxBackupBytes { get; set; } = 50L * 1024 * 1024 * 1024;
+    public int MaxVersionsPerFile { get; set; } = 20;
     [Required] public string UpdatedByAdminId { get; set; } = string.Empty;
     public DateTime UpdatedAt { get; set; }
 }

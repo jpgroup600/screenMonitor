@@ -6,7 +6,7 @@ test('every independently controlled security module is represented', () => {
   assert.deepEqual(securityPolicyModules.map(([key]) => key), [
     'monitoringEnabled', 'screenshotsEnabled', 'activeAppTrackingEnabled', 'idleTrackingEnabled',
     'backupEnabled', 'usbAuditEnabled', 'networkAuditEnabled', 'fileChangeAuditEnabled',
-    'attendanceRemindersEnabled', 'restoreEnabled',
+    'attendanceRemindersEnabled', 'restoreEnabled', 'retentionEnabled',
   ]);
 });
 
@@ -17,12 +17,23 @@ test('one module can be toggled without changing the others', () => {
   assert.equal(original.backupEnabled, true);
 });
 
-test('API payload contains booleans only and excludes server metadata', () => {
+test('API payload contains module switches and bounded retention settings', () => {
   const payload = securityPolicyPayload({
     ...Object.fromEntries(securityPolicyModules.map(([key]) => [key, true])),
     deviceId: 'device-1', updatedByAdminId: 'admin-1',
+    retentionDays: 30, maxBackupBytes: 5 * 1024 ** 3, maxVersionsPerFile: 12,
   });
-  assert.equal(Object.keys(payload).length, 10);
+  assert.equal(Object.keys(payload).length, 14);
   assert.equal(payload.deviceId, undefined);
-  assert.ok(Object.values(payload).every((value) => typeof value === 'boolean'));
+  assert.equal(payload.retentionDays, 30);
+  assert.equal(payload.maxBackupBytes, 5 * 1024 ** 3);
+  assert.equal(payload.maxVersionsPerFile, 12);
+  assert.ok(securityPolicyModules.every(([key]) => typeof payload[key] === 'boolean'));
+});
+
+test('invalid retention values fall back to safe defaults', () => {
+  const payload = securityPolicyPayload({ retentionDays: 0, maxBackupBytes: -1, maxVersionsPerFile: 5000 });
+  assert.equal(payload.retentionDays, 90);
+  assert.equal(payload.maxBackupBytes, 50 * 1024 ** 3);
+  assert.equal(payload.maxVersionsPerFile, 20);
 });
