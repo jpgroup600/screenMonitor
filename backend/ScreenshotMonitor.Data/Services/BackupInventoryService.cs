@@ -113,7 +113,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         return await query.OrderBy(x => x.Path).Skip(Math.Max(skip, 0)).Take(Math.Clamp(take, 1, 500)).ToListAsync();
     }
 
-    public async Task<List<InventoryFolder>> ListFoldersAsync(string runId, string? search, int take = 1000)
+    public async Task<List<InventoryFolder>> ListFoldersAsync(string runId, string? search, int skip = 0, int take = 100)
     {
         var files = await db.BackupInventoryItems.AsNoTracking().Where(x => x.RunId == runId)
             .Select(x => new { x.Path, x.SizeBytes, x.Status }).ToListAsync();
@@ -124,7 +124,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
             folders = folders.Where(x => x.Path.Contains(keyword, StringComparison.OrdinalIgnoreCase)
                 || x.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase)).ToList();
         }
-        return folders.OrderBy(x => x.Path).Take(Math.Clamp(take, 1, 5000)).ToList();
+        return folders.OrderBy(x => x.Path).Skip(Math.Max(skip, 0)).Take(Math.Clamp(take, 1, 500)).ToList();
     }
 
     internal static List<InventoryFolder> AggregateFolders(IEnumerable<(string Path, long SizeBytes, string Status)> files)
@@ -177,6 +177,19 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
 
     public Task<List<BackupPathRule>> ListRulesAsync(string deviceId) => db.BackupPathRules.AsNoTracking()
         .Where(x => x.DeviceId == deviceId).OrderByDescending(x => x.Path.Length).ToListAsync();
+
+    public async Task<BackupPathRule?> RemoveRuleAsync(string ruleId)
+    {
+        var rule = await db.BackupPathRules.FirstOrDefaultAsync(x => x.Id == ruleId);
+        if (rule is null) return null;
+        db.BackupPathRules.Remove(rule);
+        await db.SaveChangesAsync();
+        foreach (var run in await db.BackupInventoryRuns.Where(x => x.DeviceId == rule.DeviceId
+            && (x.Status == "InventoryReady" || x.Status == "BackingUp")).ToListAsync())
+            await ApplyRulesAsync(run);
+        await db.SaveChangesAsync();
+        return rule;
+    }
 
     public Task<BackupInventoryRun?> ActiveRunAsync(string employeeId, string deviceId) => db.BackupInventoryRuns.AsNoTracking()
         .Where(x => x.EmployeeId == employeeId && x.DeviceId == deviceId && x.Status != "Completed")

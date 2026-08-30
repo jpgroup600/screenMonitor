@@ -133,8 +133,9 @@ public class BackupsController(BackupService service, BackupRestoreService resto
             new InventoryItemDto(x.Id, x.RunId, x.Path, x.SizeBytes, x.ModifiedUnixSeconds, x.Status, x.Error, x.DiscoveredAt, x.BackedUpAt)));
 
     [Authorize(Roles = "Admin"), HttpGet("inventory/runs/{runId}/folders")]
-    public async Task<ActionResult<IEnumerable<InventoryFolderDto>>> InventoryFolders(string runId, [FromQuery] string? search = null, [FromQuery] int take = 1000) =>
-        Ok((await inventoryService.ListFoldersAsync(runId, search, take)).Select(x =>
+    public async Task<ActionResult<IEnumerable<InventoryFolderDto>>> InventoryFolders(string runId, [FromQuery] string? search = null,
+        [FromQuery] int skip = 0, [FromQuery] int take = 100) =>
+        Ok((await inventoryService.ListFoldersAsync(runId, search, skip, take)).Select(x =>
             new InventoryFolderDto(x.Path, x.Name, x.ParentPath, x.Depth, x.FileCount, x.SizeBytes, x.Pending, x.BackedUp, x.Failed, x.Excluded, x.Unchanged)));
 
     [Authorize(Roles = "Admin"), HttpGet("inventory/rules")]
@@ -163,6 +164,16 @@ public class BackupsController(BackupService service, BackupRestoreService resto
             return Ok(new { updated });
         }
         catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
+    }
+
+    [Authorize(Roles = "Admin"), HttpDelete("inventory/rules/{ruleId}")]
+    public async Task<IActionResult> DeleteInventoryRule(string ruleId)
+    {
+        var removed = await inventoryService.RemoveRuleAsync(ruleId);
+        if (removed is null) return NotFound();
+        await audit.AppendAndSaveAsync(EmployeeId, "BACKUP_PATH_RULE_DELETED", "Device", removed.DeviceId,
+            new { removed.Path, removed.Action }, null);
+        return NoContent();
     }
 
     private static InventoryRunDto ToInventoryRun(ScreenshotMonitor.Data.Entities.BackupInventoryRun value) =>

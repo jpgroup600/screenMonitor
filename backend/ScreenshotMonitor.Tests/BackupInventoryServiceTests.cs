@@ -125,6 +125,40 @@ public class BackupInventoryServiceTests
         Assert.Contains(folders, x => x.Path == @"C:\Users\ASUS\Desktop\Work" && x.FileCount == 1);
     }
 
+    [Fact]
+    public async Task Folder_listing_is_paginated_after_search_and_sorting()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        var run = await service.StartAsync("employee-1", "device-1");
+        await service.AddBatchAsync(run.Id, "employee-1", Enumerable.Range(0, 4)
+            .Select(index => new InventoryEntry($@"C:\Work\Folder{index}\file.txt", 1, index)));
+        await service.CompleteInventoryAsync(run.Id, "employee-1");
+
+        var page = await service.ListFoldersAsync(run.Id, "Folder", skip: 1, take: 2);
+
+        Assert.Equal(new[] { @"C:\Work\Folder1", @"C:\Work\Folder2" }, page.Select(x => x.Path));
+    }
+
+    [Fact]
+    public async Task Removing_a_rule_reapplies_the_remaining_parent_or_default_policy()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        var parent = await service.SetRuleAsync("device-1", @"C:\Work", "Exclude");
+        var child = await service.SetRuleAsync("device-1", @"C:\Work\Allowed", "Include");
+        var run = await service.StartAsync("employee-1", "device-1");
+        await service.AddBatchAsync(run.Id, "employee-1", new[] { new InventoryEntry(@"C:\Work\Allowed\plan.txt", 1, 1) });
+        await service.CompleteInventoryAsync(run.Id, "employee-1");
+        Assert.Equal("Pending", Assert.Single(db.BackupInventoryItems).Status);
+
+        Assert.Equal(child.Id, (await service.RemoveRuleAsync(child.Id))!.Id);
+
+        Assert.Equal("Excluded", Assert.Single(db.BackupInventoryItems).Status);
+        Assert.Null(await service.RemoveRuleAsync("missing"));
+        Assert.NotNull(await db.BackupPathRules.FindAsync(parent.Id));
+    }
+
     private static User Employee() => new() { Id = "employee-1", FullName = "Employee", Email = "e@example.com", PasswordHash = "hash", Role = "Employee", Designation = "", PhoneNumber = "" };
     private static SmDbContext CreateDb() => new(new DbContextOptionsBuilder<SmDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 }
