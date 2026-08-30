@@ -16,18 +16,27 @@ use std::{
 };
 
 pub fn run_collector(running: Arc<AtomicBool>) -> Result<(), String> {
+    run_collector_in(program_data_directory(), running)
+}
+
+fn run_collector_in(
+    data_directory: std::path::PathBuf,
+    running: Arc<AtomicBool>,
+) -> Result<(), String> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|error| error.to_string())?;
-    runtime.block_on(collect(running))
+    runtime.block_on(collect(data_directory, running))
 }
 
-async fn collect(running: Arc<AtomicBool>) -> Result<(), String> {
+async fn collect(
+    data_directory: std::path::PathBuf,
+    running: Arc<AtomicBool>,
+) -> Result<(), String> {
     if !running.load(Ordering::SeqCst) {
         return Ok(());
     }
-    let data_directory = program_data_directory();
     let config_path = data_directory.join("agent-policy.dat");
     let spool = ServiceSpool::new(data_directory.join("service-spool"))?;
     let backups = ServiceBackupQueue::new(data_directory.join("service-backups"))?;
@@ -73,8 +82,13 @@ async fn collect(running: Arc<AtomicBool>) -> Result<(), String> {
                         let source = event.destination.unwrap_or(event.source);
                         let queue = backups.clone();
                         tokio::spawn(async move {
-                            tokio::time::sleep(Duration::from_secs(10)).await;
-                            let _ = tokio::task::spawn_blocking(move || queue.stage(&source)).await;
+                            for _ in 0..6 {
+                                tokio::time::sleep(Duration::from_secs(10)).await;
+                                if file_has_stabilized(&source, std::time::SystemTime::now(), Duration::from_secs(10)) {
+                                    let _ = tokio::task::spawn_blocking(move || queue.stage(&source)).await;
+                                    break;
+                                }
+                            }
                         });
                     }
                 }
@@ -137,6 +151,18 @@ fn drive_changes(
     changes
 }
 
+fn file_has_stabilized(
+    path: &std::path::Path,
+    now: std::time::SystemTime,
+    window: Duration,
+) -> bool {
+    std::fs::metadata(path)
+        .ok()
+        .filter(|metadata| metadata.is_file())
+        .and_then(|metadata| metadata.modified().ok())
+        .is_some_and(|modified| now.duration_since(modified).is_ok_and(|age| age >= window))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -159,5 +185,70 @@ mod tests {
                 ("USB_CONNECTED", "F:\\".to_owned()),
             ]
         );
+    }
+
+    #[test]
+    fn collector_stages_a_stable_file_without_a_user_session() {
+        let directory = tempfile::Builder::new()
+            .prefix("service-agent-integration-")
+            .tempdir_in(".")
+            .unwrap();
+        let watched = directory.path().join("work");
+        std::fs::create_dir_all(&watched).unwrap();
+        let data = directory.path().join("program-data");
+        ServiceConfig {
+            backup_enabled: true,
+            file_change_audit_enabled: false,
+            network_audit_enabled: false,
+            usb_audit_enabled: false,
+            usb_file_copy_audit_enabled: false,
+            roots: vec![watched.to_string_lossy().into_owned()],
+        }
+        .save(&data.join("agent-policy.dat"))
+        .unwrap();
+        let running = Arc::new(AtomicBool::new(true));
+        let worker_running = running.clone();
+        let worker_data = data.clone();
+        let worker = std::thread::spawn(move || run_collector_in(worker_data, worker_running));
+        std::thread::sleep(Duration::from_secs(1));
+        let source = watched.join("offline-plan.txt");
+        std::fs::write(&source, b"captured by windows service").unwrap();
+        std::thread::sleep(Duration::from_secs(12));
+        running.store(false, Ordering::SeqCst);
+        worker.join().unwrap().unwrap();
+
+        let queue = ServiceBackupQueue::new(data.join("service-backups")).unwrap();
+        let pending = queue.pending().unwrap();
+        assert!(!pending.is_empty());
+        let captured = pending
+            .into_iter()
+            .find(|(_, item)| item.source_path == source)
+            .unwrap()
+            .1;
+        std::fs::remove_file(&source).unwrap();
+        let restored = watched.join("restored.txt");
+        crate::backup_staging::restore_file(&captured.container_path, &restored).unwrap();
+        assert_eq!(
+            std::fs::read(restored).unwrap(),
+            b"captured by windows service"
+        );
+    }
+
+    #[test]
+    fn service_does_not_stage_a_file_until_its_last_write_is_stable() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("editing.txt");
+        std::fs::write(&source, b"editing").unwrap();
+        let modified = std::fs::metadata(&source).unwrap().modified().unwrap();
+        assert!(!file_has_stabilized(
+            &source,
+            modified + Duration::from_secs(9),
+            Duration::from_secs(10)
+        ));
+        assert!(file_has_stabilized(
+            &source,
+            modified + Duration::from_secs(11),
+            Duration::from_secs(10)
+        ));
     }
 }
