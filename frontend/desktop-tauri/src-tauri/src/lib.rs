@@ -35,6 +35,7 @@ use tauri_plugin_notification::NotificationExt;
 
 const BACKEND_URL: &str = "https://api-production-18d6.up.railway.app/api";
 const ATTENDANCE_REMINDER_INTERVAL: Duration = Duration::from_secs(10 * 60);
+const BACKUP_STABILITY_WINDOW: Duration = Duration::from_secs(10);
 
 struct AppState {
     session: Mutex<Option<MonitorSession>>,
@@ -595,6 +596,15 @@ async fn process_inventory_backup(
     let mut failed = 0;
     for item in items {
         let source = PathBuf::from(&item.path);
+        if !backup_file_is_stable(
+            &source,
+            item.size_bytes,
+            item.modified_unix_seconds,
+            std::time::SystemTime::now(),
+            BACKUP_STABILITY_WINDOW,
+        ) {
+            continue;
+        }
         let result = async {
             let staged = backup_staging::stage_file(&source, &state.backup_staging_directory)?;
             let upload = client
@@ -647,6 +657,42 @@ async fn process_inventory_backup(
         skipped_entries: 0,
         inaccessible_entries: 0,
     })
+}
+
+fn backup_file_is_stable(
+    source: &std::path::Path,
+    expected_size: u64,
+    expected_modified_unix_seconds: Option<u64>,
+    now: std::time::SystemTime,
+    stability_window: Duration,
+) -> bool {
+    let Ok(metadata) = std::fs::metadata(source) else { return false };
+    if !metadata.is_file() || metadata.len() != expected_size { return false; }
+    let Ok(modified) = metadata.modified() else { return false };
+    let current_modified = modified.duration_since(std::time::UNIX_EPOCH).ok().map(|value| value.as_secs());
+    if expected_modified_unix_seconds.is_some() && current_modified != expected_modified_unix_seconds {
+        return false;
+    }
+    now.duration_since(modified).is_ok_and(|age| age >= stability_window)
+}
+
+#[cfg(test)]
+mod backup_stability_tests {
+    use super::*;
+
+    #[test]
+    fn changed_or_recent_files_remain_pending_until_stable() {
+        let directory = tempfile::tempdir().unwrap();
+        let source = directory.path().join("plan.txt");
+        std::fs::write(&source, b"company-plan").unwrap();
+        let metadata = std::fs::metadata(&source).unwrap();
+        let modified = metadata.modified().unwrap();
+        let modified_seconds = modified.duration_since(std::time::UNIX_EPOCH).ok().map(|value| value.as_secs());
+
+        assert!(!backup_file_is_stable(&source, metadata.len() + 1, modified_seconds, modified + Duration::from_secs(20), BACKUP_STABILITY_WINDOW));
+        assert!(!backup_file_is_stable(&source, metadata.len(), modified_seconds, modified + Duration::from_secs(5), BACKUP_STABILITY_WINDOW));
+        assert!(backup_file_is_stable(&source, metadata.len(), modified_seconds, modified + Duration::from_secs(11), BACKUP_STABILITY_WINDOW));
+    }
 }
 
 #[tauri::command]
