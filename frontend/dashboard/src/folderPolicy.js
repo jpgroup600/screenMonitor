@@ -26,3 +26,11 @@ export function effectiveFolderRule(path, rules = []) {
   if (!matching.length) return { action: 'Include', inherited: true, source: null };
   return { action: matching[0].action, inherited: matching[0].path.toLowerCase() !== path.toLowerCase(), source: matching[0].path };
 }
+
+export function splitExplicitRules(rules = []) {
+  const newest = [...rules].sort((left, right) => new Date(right.createdAt) - new Date(left.createdAt));
+  return {
+    included: newest.filter((rule) => rule.action === 'Include'),
+    excluded: newest.filter((rule) => rule.action === 'Exclude'),
+  };
+}
