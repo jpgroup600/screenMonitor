@@ -8,6 +8,14 @@ namespace ScreenshotMonitor.Tests;
 
 public class SecurityEventServiceTests
 {
+    [Fact]
+    public async Task External_network_signal_is_recorded_as_warning_without_claiming_confirmed_transfer()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new SecurityEventService(db, TimeProvider.System);
+        var entry = await service.RecordAsync("employee-1", "device-1", "NETWORK_TRANSFER", "8.8.8.8:443", "{\"confirmedFileTransfer\":false}");
+        Assert.Equal("Warning", entry.Severity); Assert.Contains("false", entry.Details);
+    }
     [Theory]
     [InlineData("FILE_DELETED")]
     [InlineData("FILE_MOVED")]

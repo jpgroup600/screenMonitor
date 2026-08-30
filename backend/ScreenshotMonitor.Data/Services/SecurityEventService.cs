@@ -18,7 +18,8 @@ public class SecurityEventService(SmDbContext dbContext, TimeProvider timeProvid
         var entry = new SecurityEvent {
             EmployeeId = employeeId, DeviceId = deviceId, EventType = eventType.ToUpperInvariant(),
             Source = source, Details = string.IsNullOrWhiteSpace(details) ? "{}" : details,
-            Severity = eventType.Equals("USB_CONNECTED", StringComparison.OrdinalIgnoreCase) ? "Warning" : "Info",
+            Severity = eventType.Equals("USB_CONNECTED", StringComparison.OrdinalIgnoreCase)
+                || eventType.Equals("NETWORK_TRANSFER", StringComparison.OrdinalIgnoreCase) ? "Warning" : "Info",
             OccurredAt = timeProvider.GetUtcNow().UtcDateTime
         };
         dbContext.SecurityEvents.Add(entry); await dbContext.SaveChangesAsync(); return entry;

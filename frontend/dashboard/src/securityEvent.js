@@ -4,7 +4,7 @@ export const SECURITY_EVENT_LABELS = {
   FILE_COPY: '파일 복사',
   FILE_DELETED: '파일 삭제',
   FILE_MOVED: '파일 이동',
-  NETWORK_TRANSFER: '네트워크 반출',
+  NETWORK_TRANSFER: '외부 네트워크 연결',
 };
 
 export function securityEventLabel(type) {

@@ -46,6 +46,10 @@ pub fn spawn(
         );
         let mut retry_tick = tokio::time::interval(Duration::from_secs(30));
         let mut restore_tick = tokio::time::interval(Duration::from_secs(30));
+        let mut network_tick = tokio::time::interval(Duration::from_secs(15));
+        let mut network_baseline: Option<
+            std::collections::HashSet<crate::network_audit::ExternalConnection>,
+        > = None;
         while task_running.load(Ordering::SeqCst) {
             tokio::select! {
                 _ = activity_tick.tick() => {
@@ -68,6 +72,18 @@ pub fn spawn(
                 }
                 _ = restore_tick.tick() => {
                     let _ = process_restore_requests(&api, &device_id, &restore_directory).await;
+                }
+                _ = network_tick.tick() => {
+                    if let Ok(current) = tauri::async_runtime::spawn_blocking(crate::network_audit::established_external_connections).await.unwrap_or_else(|error| Err(error.to_string())) {
+                        if let Some(previous) = &network_baseline {
+                            for connection in crate::network_audit::detect_new(previous, &current).into_iter().take(100) {
+                                let source = format!("{}:{}", connection.remote_address, connection.remote_port);
+                                let details = serde_json::json!({"processId":connection.process_id,"evidence":"new_external_tcp_connection","confirmedFileTransfer":false}).to_string();
+                                let _ = api.security_event(&device_id, "NETWORK_TRANSFER", &source, &details).await;
+                            }
+                        }
+                        network_baseline = Some(current);
+                    }
                 }
             }
         }

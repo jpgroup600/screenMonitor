@@ -7,6 +7,7 @@ mod backup_staging;
 mod core;
 mod data_protection;
 mod monitor;
+mod network_audit;
 mod offline_queue;
 mod platform;
 
