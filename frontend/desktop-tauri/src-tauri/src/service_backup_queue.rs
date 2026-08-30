@@ -5,6 +5,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -155,14 +156,35 @@ impl ServiceBackupQueue {
 
     fn trim(&self) -> Result<(), String> {
         let pending = self.pending()?;
-        let mut total = pending
+        let referenced = pending
             .iter()
-            .map(|(_, item)| {
-                fs::metadata(&item.container_path)
-                    .map(|value| value.len())
-                    .unwrap_or(0)
+            .map(|(_, item)| item.container_path.clone())
+            .collect::<HashSet<_>>();
+        let mut containers = fs::read_dir(&self.containers)
+            .map_err(|error| error.to_string())?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                matches!(
+                    path.extension().and_then(|value| value.to_str()),
+                    Some("backup" | "pending")
+                )
             })
+            .collect::<Vec<_>>();
+        containers.sort();
+        let mut total = containers
+            .iter()
+            .map(|path| fs::metadata(path).map(|value| value.len()).unwrap_or(0))
             .sum::<u64>();
+
+        for orphan in containers.iter().filter(|path| !referenced.contains(*path)) {
+            if total <= self.max_bytes {
+                break;
+            }
+            let size = fs::metadata(orphan).map(|value| value.len()).unwrap_or(0);
+            let _ = fs::remove_file(orphan);
+            total = total.saturating_sub(size);
+        }
         for (job, item) in pending {
             if total <= self.max_bytes {
                 break;
@@ -250,5 +272,18 @@ mod tests {
         assert_eq!(queue.pending_count().unwrap(), 0);
         queue.stage(&source).unwrap();
         assert_eq!(queue.pending_count().unwrap(), 1);
+    }
+
+    #[test]
+    fn size_limit_counts_and_trims_crash_orphaned_containers_first() {
+        let directory = tempfile::tempdir().unwrap();
+        let queue = ServiceBackupQueue::with_limit(directory.path().join("queue"), 16).unwrap();
+        let orphan = queue.containers.join("00000000000000000001-000000.backup");
+        fs::write(&orphan, [7_u8; 32]).unwrap();
+
+        queue.trim().unwrap();
+
+        assert!(!orphan.exists());
+        assert_eq!(queue.pending_count().unwrap(), 0);
     }
 }
