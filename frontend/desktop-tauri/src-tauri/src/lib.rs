@@ -36,6 +36,7 @@ struct AppState {
     backup_staging_directory: PathBuf,
     backup_manifest_path: PathBuf,
     backup_retry_directory: PathBuf,
+    restore_directory: PathBuf,
 }
 
 impl AppState {
@@ -52,6 +53,10 @@ impl AppState {
             .parent()
             .ok_or("Invalid application data directory")?
             .join("backup-retry");
+        let restore_directory = queue_directory
+            .parent()
+            .ok_or("Invalid application data directory")?
+            .join("restores");
         Ok(Self {
             session: Mutex::new(None),
             reminder: Mutex::new(None),
@@ -60,6 +65,7 @@ impl AppState {
             backup_staging_directory,
             backup_manifest_path,
             backup_retry_directory,
+            restore_directory,
         })
     }
 }
@@ -78,6 +84,7 @@ impl ReminderSession {
 fn start_monitoring(
     token: String,
     interval_ms: u64,
+    device_id: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let mut session = state.session.lock().map_err(|e| e.to_string())?;
@@ -90,12 +97,18 @@ fn start_monitoring(
         token,
         Some(Duration::from_millis(interval_ms)),
         state.queue.clone(),
+        device_id,
+        state.restore_directory.clone(),
     ));
     Ok(())
 }
 
 #[tauri::command]
-fn start_attendance_monitoring(token: String, state: State<'_, AppState>) -> Result<(), String> {
+fn start_attendance_monitoring(
+    token: String,
+    device_id: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     let mut session = state.session.lock().map_err(|e| e.to_string())?;
     if let Some(existing) = session.take() {
         existing.stop();
@@ -106,6 +119,8 @@ fn start_attendance_monitoring(token: String, state: State<'_, AppState>) -> Res
         token,
         Some(Duration::from_secs(10 * 60)),
         state.queue.clone(),
+        device_id,
+        state.restore_directory.clone(),
     ));
     Ok(())
 }

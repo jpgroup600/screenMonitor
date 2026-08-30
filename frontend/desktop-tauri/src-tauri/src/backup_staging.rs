@@ -1,6 +1,4 @@
-use crate::data_protection::protect;
-#[cfg(test)]
-use crate::data_protection::unprotect;
+use crate::data_protection::{protect, unprotect};
 use sha2::{Digest, Sha256};
 use std::{
     fs::{self, File},
@@ -88,8 +86,7 @@ fn write_encrypted_container(source: &Path, destination: &Path) -> Result<(), St
     output.sync_all().map_err(|error| error.to_string())
 }
 
-#[cfg(test)]
-fn restore_file(container: &Path, destination: &Path) -> Result<(), String> {
+pub fn restore_file(container: &Path, destination: &Path) -> Result<(), String> {
     let mut input = File::open(container).map_err(|error| error.to_string())?;
     let mut magic = [0_u8; MAGIC.len()];
     input
@@ -117,6 +114,19 @@ fn restore_file(container: &Path, destination: &Path) -> Result<(), String> {
             .map_err(|error| error.to_string())?;
     }
     Ok(())
+}
+
+pub fn safe_restore_path(original: &Path, suffix: u64) -> PathBuf {
+    let stem = original
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("restored");
+    let extension = original.extension().and_then(|value| value.to_str());
+    let name = match extension {
+        Some(extension) => format!("{stem}.restored-{suffix}.{extension}"),
+        None => format!("{stem}.restored-{suffix}"),
+    };
+    original.with_file_name(name)
 }
 
 fn now_nanos() -> u128 {
@@ -164,5 +174,17 @@ mod tests {
         fs::write(&container, b"not-a-container").unwrap();
 
         assert!(restore_file(&container, &directory.path().join("restored")).is_err());
+    }
+
+    #[test]
+    fn restore_path_never_overwrites_the_original() {
+        assert_eq!(
+            safe_restore_path(Path::new(r"C:\Work\file.txt"), 42),
+            PathBuf::from(r"C:\Work\file.restored-42.txt")
+        );
+        assert_ne!(
+            safe_restore_path(Path::new(r"C:\Work\file.txt"), 42),
+            PathBuf::from(r"C:\Work\file.txt")
+        );
     }
 }

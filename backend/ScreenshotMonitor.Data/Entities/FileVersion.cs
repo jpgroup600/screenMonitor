@@ -1,6 +1,7 @@
 using System;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Collections.Generic;
 
 namespace ScreenshotMonitor.Data.Entities;
 
@@ -15,4 +16,5 @@ public class FileVersion
     public long EncryptedSizeBytes { get; set; }
     public DateTime SourceModifiedAt { get; set; }
     public DateTime UploadedAt { get; set; }
+    public ICollection<BackupRestoreRequest> RestoreRequests { get; set; } = new List<BackupRestoreRequest>();
 }

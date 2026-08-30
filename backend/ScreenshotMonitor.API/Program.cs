@@ -43,6 +43,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<AttendanceService>();
 builder.Services.AddScoped<DeviceService>();
 builder.Services.AddScoped<SecurityEventService>();
+builder.Services.AddScoped<BackupRestoreService>();
 builder.Services.AddScoped<BackupService>();
 builder.Services.AddSingleton<IBackupObjectStorage, RailwayBucketStorage>();
 

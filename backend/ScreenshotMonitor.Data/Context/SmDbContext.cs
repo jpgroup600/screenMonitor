@@ -101,6 +101,9 @@ namespace ScreenshotMonitor.Data.Context
             modelBuilder.Entity<FileVersion>()
                 .HasOne(v => v.BackupFile).WithMany(f => f.Versions).HasForeignKey(v => v.BackupFileId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<FileVersion>().HasIndex(v => v.ContentHash);
+            modelBuilder.Entity<BackupRestoreRequest>()
+                .HasOne(r => r.FileVersion).WithMany(v => v.RestoreRequests).HasForeignKey(r => r.FileVersionId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<BackupRestoreRequest>().HasIndex(r => new { r.EmployeeId, r.DeviceId, r.Status });
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -139,5 +142,6 @@ namespace ScreenshotMonitor.Data.Context
         public DbSet<SecurityEvent> SecurityEvents { get; set; }
         public DbSet<BackupFile> BackupFiles { get; set; }
         public DbSet<FileVersion> FileVersions { get; set; }
+        public DbSet<BackupRestoreRequest> BackupRestoreRequests { get; set; }
     }
 }

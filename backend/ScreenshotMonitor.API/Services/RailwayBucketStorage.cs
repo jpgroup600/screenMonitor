@@ -33,6 +33,9 @@ public class RailwayBucketStorage : IBackupObjectStorage, IDisposable
     public Task DeleteAsync(string objectKey, CancellationToken cancellationToken = default) =>
         client.DeleteObjectAsync(bucketName, objectKey, cancellationToken);
 
+    public async Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken = default) =>
+        (await client.GetObjectAsync(bucketName, objectKey, cancellationToken)).ResponseStream;
+
     public void Dispose() => client.Dispose();
 
     private static string Required(IConfiguration configuration, params string[] names) =>

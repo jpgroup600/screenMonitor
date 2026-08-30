@@ -10,3 +10,8 @@ export function formatBytes(value) {
 export function newestVersionsFirst(versions = []) {
   return [...versions].sort((left, right) => new Date(right.uploadedAt) - new Date(left.uploadedAt));
 }
+
+export function restoreRequestPayload(fileVersionId) {
+  if (!fileVersionId) throw new Error('File version is required');
+  return { fileVersionId };
+}

@@ -30,6 +30,8 @@ pub fn spawn(
     token: String,
     screenshot_interval: Option<Duration>,
     queue: Arc<OfflineQueue>,
+    device_id: String,
+    restore_directory: PathBuf,
 ) -> MonitorSession {
     let running = Arc::new(AtomicBool::new(true));
     let task_running = running.clone();
@@ -43,6 +45,7 @@ pub fn spawn(
                 .max(Duration::from_secs(5)),
         );
         let mut retry_tick = tokio::time::interval(Duration::from_secs(30));
+        let mut restore_tick = tokio::time::interval(Duration::from_secs(30));
         while task_running.load(Ordering::SeqCst) {
             tokio::select! {
                 _ = activity_tick.tick() => {
@@ -63,6 +66,9 @@ pub fn spawn(
                 _ = retry_tick.tick() => {
                     let _ = retry_pending(&api, &queue).await;
                 }
+                _ = restore_tick.tick() => {
+                    let _ = process_restore_requests(&api, &device_id, &restore_directory).await;
+                }
             }
         }
         let final_app = tracker.lock().await.finish();
@@ -79,6 +85,49 @@ pub fn spawn(
         }
     });
     MonitorSession { running }
+}
+
+async fn process_restore_requests(
+    api: &ApiClient,
+    device_id: &str,
+    restore_directory: &std::path::Path,
+) -> Result<(), String> {
+    std::fs::create_dir_all(restore_directory).map_err(|e| e.to_string())?;
+    for request in api.pending_restores(device_id).await? {
+        let container = restore_directory.join(format!("{}.smbackup", request.id));
+        let destination = crate::backup_staging::safe_restore_path(
+            std::path::Path::new(&request.original_path),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs(),
+        );
+        let result = async {
+            api.download_restore(&request.id, device_id, &container)
+                .await?;
+            let source = container.clone();
+            let output = destination.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                crate::backup_staging::restore_file(&source, &output)
+            })
+            .await
+            .map_err(|e| e.to_string())??;
+            Ok::<_, String>(destination.to_string_lossy().into_owned())
+        }
+        .await;
+        let _ = std::fs::remove_file(&container);
+        match result {
+            Ok(path) => {
+                api.complete_restore(&request.id, device_id, Ok(&path))
+                    .await?
+            }
+            Err(error) => {
+                api.complete_restore(&request.id, device_id, Err(&error))
+                    .await?
+            }
+        }
+    }
+    Ok(())
 }
 
 pub async fn capture_and_upload(api: &ApiClient, queue: &OfflineQueue) -> Result<(), String> {

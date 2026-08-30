@@ -75,6 +75,7 @@ public class BackupServiceTests
         public int PutCount { get; private set; } public string? StoredKey { get; private set; } public byte[] Bytes { get; private set; } = [];
         public async Task PutAsync(string objectKey, Stream encryptedContent, string contentType, CancellationToken cancellationToken = default) { PutCount++; StoredKey = objectKey; using var memory = new MemoryStream(); await encryptedContent.CopyToAsync(memory, cancellationToken); Bytes = memory.ToArray(); }
         public Task DeleteAsync(string objectKey, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task<Stream> OpenReadAsync(string objectKey, CancellationToken cancellationToken = default) => Task.FromResult<Stream>(new MemoryStream(Bytes));
     }
     private sealed class FakeTimeProvider(DateTimeOffset now) : TimeProvider { private DateTimeOffset current = now; public override DateTimeOffset GetUtcNow() => current; public void Advance(TimeSpan value) => current += value; }
 }

@@ -7,7 +7,7 @@ using ScreenshotMonitor.Data.Services;
 namespace ScreenshotMonitor.API.Controllers;
 
 [ApiController, Authorize(Roles = "Employee,Admin"), Route("api/backups")]
-public class BackupsController(BackupService service) : ControllerBase
+public class BackupsController(BackupService service, BackupRestoreService restoreService, IBackupObjectStorage storage) : ControllerBase
 {
     private string EmployeeId => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? throw new UnauthorizedAccessException();
 
@@ -46,4 +46,31 @@ public class BackupsController(BackupService service) : ControllerBase
             file.OriginalPath, file.Versions.Select(version => new BackupVersionDto(version.Id, version.ContentHash,
                 version.PlainSizeBytes, version.SourceModifiedAt, version.UploadedAt)).ToList()));
     }
+
+    [Authorize(Roles = "Admin"), HttpPost("restore-requests")]
+    public async Task<ActionResult<BackupRestoreResponseDto>> RequestRestore(BackupRestoreRequestDto request)
+    {
+        var restore = await restoreService.RequestAsync(request.FileVersionId);
+        return restore is null ? NotFound() : Ok(ToRestoreResponse(restore));
+    }
+
+    [Authorize(Roles = "Employee,Admin"), HttpGet("restore-requests/pending")]
+    public async Task<ActionResult<IEnumerable<BackupRestoreResponseDto>>> PendingRestores([FromQuery] string deviceId) =>
+        Ok((await restoreService.PendingAsync(EmployeeId, deviceId)).Select(ToRestoreResponse));
+
+    [Authorize(Roles = "Employee,Admin"), HttpGet("restore-requests/{id}/content")]
+    public async Task<IActionResult> RestoreContent(string id, [FromQuery] string deviceId, CancellationToken cancellationToken)
+    {
+        var restore = await restoreService.GetPendingAsync(id, EmployeeId, deviceId);
+        if (restore is null) return NotFound();
+        return File(await storage.OpenReadAsync(restore.FileVersion.ObjectKey, cancellationToken), "application/octet-stream", "restore.smbackup");
+    }
+
+    [Authorize(Roles = "Employee,Admin"), HttpPost("restore-requests/{id}/complete")]
+    public async Task<IActionResult> CompleteRestore(string id, [FromQuery] string deviceId, BackupRestoreCompleteDto result) =>
+        await restoreService.CompleteAsync(id, EmployeeId, deviceId, result.Succeeded, result.ResultPath, result.Error) ? NoContent() : NotFound();
+
+    private static BackupRestoreResponseDto ToRestoreResponse(ScreenshotMonitor.Data.Entities.BackupRestoreRequest value) =>
+        new(value.Id, value.FileVersionId, value.EmployeeId, value.DeviceId, value.OriginalPath, value.Status,
+            value.RequestedAt, value.CompletedAt, value.ResultPath, value.Error);
 }

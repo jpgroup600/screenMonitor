@@ -1,6 +1,7 @@
 use reqwest::Client;
-use serde::Serialize;
-use std::path::Path;
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
+use tokio::io::AsyncWriteExt;
 use tokio_util::io::ReaderStream;
 
 #[derive(Clone)]
@@ -28,6 +29,21 @@ struct SecurityEvent<'a> {
     event_type: &'a str,
     source: &'a str,
     details: &'a str,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RestoreRequest {
+    pub id: String,
+    pub original_path: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RestoreResult<'a> {
+    succeeded: bool,
+    result_path: Option<&'a str>,
+    error: Option<&'a str>,
 }
 
 impl ApiClient {
@@ -153,6 +169,87 @@ impl ApiClient {
             .map_err(|e| e.to_string())?;
         Ok(())
     }
+
+    pub async fn pending_restores(&self, device_id: &str) -> Result<Vec<RestoreRequest>, String> {
+        self.client
+            .get(format!(
+                "{}/backups/restore-requests/pending",
+                self.base_url
+            ))
+            .bearer_auth(&self.token)
+            .query(&[("deviceId", device_id)])
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?
+            .json()
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn download_restore(
+        &self,
+        request_id: &str,
+        device_id: &str,
+        destination: &Path,
+    ) -> Result<PathBuf, String> {
+        let mut response = self
+            .client
+            .get(format!(
+                "{}/backups/restore-requests/{request_id}/content",
+                self.base_url
+            ))
+            .bearer_auth(&self.token)
+            .query(&[("deviceId", device_id)])
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?;
+        let mut file = tokio::fs::File::create(destination)
+            .await
+            .map_err(|e| e.to_string())?;
+        while let Some(chunk) = response.chunk().await.map_err(|e| e.to_string())? {
+            file.write_all(&chunk).await.map_err(|e| e.to_string())?;
+        }
+        file.flush().await.map_err(|e| e.to_string())?;
+        Ok(destination.to_path_buf())
+    }
+
+    pub async fn complete_restore(
+        &self,
+        request_id: &str,
+        device_id: &str,
+        result: Result<&str, &str>,
+    ) -> Result<(), String> {
+        let body = match result {
+            Ok(path) => RestoreResult {
+                succeeded: true,
+                result_path: Some(path),
+                error: None,
+            },
+            Err(error) => RestoreResult {
+                succeeded: false,
+                result_path: None,
+                error: Some(error),
+            },
+        };
+        self.client
+            .post(format!(
+                "{}/backups/restore-requests/{request_id}/complete",
+                self.base_url
+            ))
+            .bearer_auth(&self.token)
+            .query(&[("deviceId", device_id)])
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -241,5 +338,41 @@ mod tests {
             .await
             .unwrap();
         mock.assert();
+    }
+
+    #[tokio::test]
+    async fn polls_downloads_and_completes_restore_request() {
+        let server = MockServer::start();
+        let pending = server.mock(|when, then| {
+            when.method(GET)
+                .path("/api/backups/restore-requests/pending")
+                .query_param("deviceId", "device-1");
+            then.status(200).json_body_obj(
+                &serde_json::json!([{"id":"restore-1","originalPath":"C:\\Work\\file.txt"}]),
+            );
+        });
+        let download = server.mock(|when, then| {
+            when.method(GET)
+                .path("/api/backups/restore-requests/restore-1/content")
+                .query_param("deviceId", "device-1");
+            then.status(200).body("encrypted");
+        });
+        let complete = server.mock(|when, then| { when.method(POST).path("/api/backups/restore-requests/restore-1/complete").query_param("deviceId", "device-1").json_body_obj(&serde_json::json!({"succeeded":true,"resultPath":"C:\\Work\\file.restored.txt","error":null})); then.status(204); });
+        let directory = tempfile::tempdir().unwrap();
+        let target = directory.path().join("restore.backup");
+        let client = ApiClient::new(format!("{}/api", server.base_url()), "token".into());
+        let jobs = client.pending_restores("device-1").await.unwrap();
+        client
+            .download_restore(&jobs[0].id, "device-1", &target)
+            .await
+            .unwrap();
+        client
+            .complete_restore(&jobs[0].id, "device-1", Ok(r"C:\Work\file.restored.txt"))
+            .await
+            .unwrap();
+        assert_eq!(std::fs::read(target).unwrap(), b"encrypted");
+        pending.assert();
+        download.assert();
+        complete.assert();
     }
 }

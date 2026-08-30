@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatBytes, newestVersionsFirst } from './backupFile.js';
+import { formatBytes, newestVersionsFirst, restoreRequestPayload } from './backupFile.js';
 
 test('formatBytes formats backup sizes for administrators', () => {
   assert.equal(formatBytes(0), '0 B');
   assert.equal(formatBytes(1536), '1.5 KB');
   assert.equal(formatBytes(2 * 1024 * 1024), '2 MB');
+});
+
+test('restore request targets one exact backup version', () => {
+  assert.deepEqual(restoreRequestPayload('version-1'), { fileVersionId: 'version-1' });
+  assert.throws(() => restoreRequestPayload(''), /required/);
 });
 
 test('newestVersionsFirst sorts without mutating API data', () => {
