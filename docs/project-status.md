@@ -442,3 +442,13 @@
 - heartbeat는 직원 역할만 호출할 수 있도록 제한
 - EF 마이그레이션 `AddAgentHealthStatus` 추가
 - 검증: 백엔드 56개, 관리자 15개, Tauri JavaScript 17개, Rust 39개 테스트 및 관리자 프로덕션 빌드 통과
+
+## 2026-08-31 Windows 설치 파일 재빌드
+
+- 최신 실시간 파일 감지·정책·에이전트 상태 코드를 포함한 x64 NSIS 설치 파일 빌드 성공
+- 산출물: `frontend/desktop-tauri/src-tauri/target/release/bundle/nsis/출퇴근 관리 프로그램_2.0.0_x64-setup.exe`
+- 설치 파일 크기: 3,739,918 bytes
+- 설치 파일 SHA-256: `02392A2310E6902642BC576283EA7144B12598CF48417D43C83528B8BC1B8A8C`
+- 실행 파일 SHA-256: `638A325772E05C355C5FB1817845F497DBFA81A9CAF9715177F3B6F72E72D942`
+- 현재 설치 파일은 코드 서명 인증서가 없어 `NotSigned`; 외부 배포 전 회사 코드 서명 인증서 적용 필요
+- 기존 개발용 릴리스 프로세스가 산출물을 잠가 첫 빌드가 실패했으며, 해당 프로세스만 종료한 뒤 재빌드 성공
