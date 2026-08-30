@@ -90,6 +90,15 @@ impl ServiceBackupQueue {
             .collect()
     }
 
+    pub fn pending_count(&self) -> Result<usize, String> {
+        Ok(fs::read_dir(&self.directory)
+            .map_err(|error| error.to_string())?
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("job"))
+            .count())
+    }
+
     pub fn inventory_files(&self) -> Result<Vec<InventoryFile>, String> {
         Ok(self
             .pending()?
@@ -229,5 +238,17 @@ mod tests {
             second.join().unwrap().content_hash
         );
         assert_eq!(queue.pending().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn pending_count_reports_jobs_without_decrypting_every_container() {
+        let directory = tempfile::tempdir().unwrap();
+        let queue = ServiceBackupQueue::new(directory.path().join("queue")).unwrap();
+        let source = directory.path().join("approved.txt");
+        fs::write(&source, b"approved backup").unwrap();
+
+        assert_eq!(queue.pending_count().unwrap(), 0);
+        queue.stage(&source).unwrap();
+        assert_eq!(queue.pending_count().unwrap(), 1);
     }
 }

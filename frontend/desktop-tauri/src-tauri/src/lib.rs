@@ -174,8 +174,16 @@ fn agent_status(state: State<'_, AppState>) -> Result<AgentStatus, String> {
         agent_version: env!("CARGO_PKG_VERSION"),
         agent_mode,
         monitoring_state,
-        pending_queue_items: state.queue.pending()?.len() + state.service_spool.pending()?.len(),
+        pending_queue_items: total_pending_items(
+            state.queue.pending()?.len(),
+            state.service_spool.pending()?.len(),
+            state.service_backups.pending_count()?,
+        ),
     })
+}
+
+fn total_pending_items(offline: usize, events: usize, backups: usize) -> usize {
+    offline.saturating_add(events).saturating_add(backups)
 }
 
 fn resolve_agent_runtime(
@@ -220,7 +228,7 @@ fn windows_service_state() -> Option<bool> {
 
 #[cfg(test)]
 mod agent_runtime_tests {
-    use super::resolve_agent_runtime;
+    use super::{resolve_agent_runtime, total_pending_items};
 
     #[test]
     fn reports_hybrid_mode_when_service_is_installed() {
@@ -236,6 +244,12 @@ mod agent_runtime_tests {
             resolve_agent_runtime(false, None),
             ("UserSession".into(), "Stopped".into())
         );
+    }
+
+    #[test]
+    fn queue_health_includes_encrypted_service_backups() {
+        assert_eq!(total_pending_items(2, 3, 5), 10);
+        assert_eq!(total_pending_items(usize::MAX, 1, 1), usize::MAX);
     }
 }
 
