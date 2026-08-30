@@ -39,6 +39,12 @@ public class BackupInventoryServiceTests
         Assert.Equal("Pending", rows.Single(x => x.Path.Contains("Company")).Status);
         Assert.Equal("Excluded", rows.Single(x => x.Path.Contains("private")).Status);
         Assert.Equal("Pending", rows.Single(x => x.Path.Contains("default")).Status);
+        Assert.True(await service.StartBackupAsync(run.Id));
+        Assert.Equal("BackingUp", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
+        var pending = await service.PendingItemsAsync(run.Id, "employee-1", "device-1", 10);
+        Assert.Equal(2, pending.Count);
+        foreach (var item in pending) Assert.True(await service.RecordResultAsync(item.Id, "employee-1", "device-1", true, null));
+        Assert.Equal("Completed", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
     }
 
     private static User Employee() => new() { Id = "employee-1", FullName = "Employee", Email = "e@example.com", PasswordHash = "hash", Role = "Employee", Designation = "", PhoneNumber = "" };

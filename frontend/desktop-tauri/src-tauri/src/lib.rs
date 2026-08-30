@@ -224,6 +224,10 @@ async fn run_incremental_backup(
     roots: Vec<String>,
     state: State<'_, AppState>,
 ) -> Result<IncrementalBackupResult, String> {
+    let client = api::ApiClient::new(BACKEND_URL.into(), token.clone());
+    if client.active_inventory(&device_id).await?.is_some() {
+        return Ok(IncrementalBackupResult { scanned_files: 0, changed_files: 0, uploaded_files: 0, failed_files: 0, skipped_entries: 0, inaccessible_entries: 0 });
+    }
     let inventory = tauri::async_runtime::spawn_blocking(move || {
         let policy = backup_policy::BackupPolicy::default();
         let mut inventory = backup_inventory::InventoryResult::default();
@@ -237,6 +241,31 @@ async fn run_incremental_backup(
     })
     .await
     .map_err(|error| error.to_string())?;
+    let inventory_run = client.start_inventory(&device_id).await?;
+    for batch in inventory.files.chunks(500) {
+        let files = batch
+            .iter()
+            .map(|file| api::InventoryFile {
+                path: file.path.to_str().unwrap_or_default(),
+                size_bytes: file.size_bytes,
+                modified_unix_seconds: file.modified_unix_seconds,
+            })
+            .collect::<Vec<_>>();
+        client
+            .add_inventory_batch(&inventory_run.id, &files)
+            .await?;
+    }
+    client.complete_inventory(&inventory_run.id).await?;
+    return Ok(IncrementalBackupResult {
+        scanned_files: inventory.files.len(),
+        changed_files: 0,
+        uploaded_files: 0,
+        failed_files: 0,
+        skipped_entries: inventory.skipped_entries,
+        inaccessible_entries: inventory.inaccessible_entries,
+    });
+
+    #[allow(unreachable_code)]
     let mut manifest = backup_manifest::BackupManifest::load(&state.backup_manifest_path)?;
     let retry_queue = backup_retry::BackupRetryQueue::new(state.backup_retry_directory.clone())?;
     let client = api::ApiClient::new(BACKEND_URL.into(), token);
@@ -362,6 +391,81 @@ async fn run_incremental_backup(
 }
 
 #[tauri::command]
+async fn process_inventory_backup(
+    token: String,
+    device_id: String,
+    state: State<'_, AppState>,
+) -> Result<IncrementalBackupResult, String> {
+    let client = api::ApiClient::new(BACKEND_URL.into(), token);
+    let Some(run) = client.active_inventory(&device_id).await? else {
+        return Ok(IncrementalBackupResult {
+            scanned_files: 0,
+            changed_files: 0,
+            uploaded_files: 0,
+            failed_files: 0,
+            skipped_entries: 0,
+            inaccessible_entries: 0,
+        });
+    };
+    if run.status != "BackingUp" {
+        return Ok(IncrementalBackupResult {
+            scanned_files: 0,
+            changed_files: 0,
+            uploaded_files: 0,
+            failed_files: 0,
+            skipped_entries: 0,
+            inaccessible_entries: 0,
+        });
+    }
+    let items = client.pending_inventory(&run.id, &device_id, 3).await?;
+    let mut uploaded = 0;
+    let mut failed = 0;
+    for item in items {
+        let source = PathBuf::from(&item.path);
+        let result = async {
+            let staged = backup_staging::stage_file(&source, &state.backup_staging_directory)?;
+            let upload = client
+                .upload_backup(
+                    &device_id,
+                    &item.path,
+                    &staged.content_hash,
+                    staged.plain_size_bytes,
+                    staged.source_modified_unix_seconds,
+                    &staged.container_path,
+                )
+                .await;
+            if upload.is_ok() {
+                let _ = std::fs::remove_file(&staged.container_path);
+            }
+            upload
+        }
+        .await;
+        match result {
+            Ok(()) => {
+                uploaded += 1;
+                client
+                    .inventory_result(&item.id, &device_id, true, None)
+                    .await?;
+            }
+            Err(error) => {
+                failed += 1;
+                client
+                    .inventory_result(&item.id, &device_id, false, Some(&error))
+                    .await?;
+            }
+        }
+    }
+    Ok(IncrementalBackupResult {
+        scanned_files: 0,
+        changed_files: 0,
+        uploaded_files: uploaded,
+        failed_files: failed,
+        skipped_entries: 0,
+        inaccessible_entries: 0,
+    })
+}
+
+#[tauri::command]
 async fn capture_screenshot(state: State<'_, AppState>) -> Result<(), String> {
     let token = state
         .token
@@ -447,6 +551,7 @@ pub fn run() {
             stage_backup_file,
             upload_backup_file,
             run_incremental_backup,
+            process_inventory_backup,
             capture_screenshot,
             start_attendance_reminders,
             stop_attendance_reminders

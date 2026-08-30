@@ -8,7 +8,7 @@ import { restoreAttendanceMonitoring } from "../attendanceRecovery";
 import { restoreAuthorizedMonitoring, sendDeviceHeartbeat } from "../deviceHeartbeat";
 import { diffRemovableDrives, recordUsbChanges } from "../usbAudit";
 import { diffUsbFiles, recordUsbFileCopies } from "../usbFileAudit";
-import { BACKUP_INITIAL_DELAY_MS, BACKUP_INTERVAL_MS, runBackupCycle } from "../backupScheduler";
+import { BACKUP_INITIAL_DELAY_MS, BACKUP_INTERVAL_MS, runBackupCycle, runBackupQueueCycle } from "../backupScheduler";
 
 const Dashboard = () => {
   const [attendance, setAttendance] = useState(null);
@@ -38,6 +38,13 @@ const Dashboard = () => {
     scanUsbFiles();
     const timer = window.setInterval(scanUsbFiles, 30_000);
     return () => window.clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const processQueue = () => runBackupQueueCycle({ native, storage: localStorage }).catch((error) => console.error("Backup queue failed:", error));
+    const initial = window.setTimeout(processQueue, 10_000);
+    const timer = window.setInterval(processQueue, 60_000);
+    return () => { window.clearTimeout(initial); window.clearInterval(timer); };
   }, []);
 
   useEffect(() => {

@@ -9,3 +9,10 @@ export async function runBackupCycle({ native, storage }) {
   if (!roots?.length) return null;
   return native.runIncrementalBackup(token, deviceId, roots);
 }
+
+export async function runBackupQueueCycle({ native, storage }) {
+  const token = storage.getItem("token");
+  const deviceId = storage.getItem("screenMonitorDeviceId");
+  if (!token || !deviceId) return null;
+  return native.processInventoryBackup(token, deviceId);
+}

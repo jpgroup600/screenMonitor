@@ -38,6 +38,34 @@ pub struct RestoreRequest {
     pub original_path: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InventoryRun {
+    pub id: String,
+    pub status: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InventoryPendingItem {
+    pub id: String,
+    pub path: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct InventoryFile<'a> {
+    pub path: &'a str,
+    pub size_bytes: u64,
+    pub modified_unix_seconds: Option<u64>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InventoryBatch<'a> {
+    files: &'a [InventoryFile<'a>],
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct RestoreResult<'a> {
@@ -250,6 +278,126 @@ impl ApiClient {
             .map_err(|e| e.to_string())?;
         Ok(())
     }
+
+    pub async fn start_inventory(&self, device_id: &str) -> Result<InventoryRun, String> {
+        self.client
+            .post(format!("{}/backups/inventory/runs", self.base_url))
+            .bearer_auth(&self.token)
+            .json(&serde_json::json!({"deviceId":device_id}))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?
+            .json()
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn add_inventory_batch(
+        &self,
+        run_id: &str,
+        files: &[InventoryFile<'_>],
+    ) -> Result<(), String> {
+        self.client
+            .post(format!(
+                "{}/backups/inventory/runs/{run_id}/files",
+                self.base_url
+            ))
+            .bearer_auth(&self.token)
+            .json(&InventoryBatch { files })
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub async fn complete_inventory(&self, run_id: &str) -> Result<(), String> {
+        self.client
+            .post(format!(
+                "{}/backups/inventory/runs/{run_id}/complete",
+                self.base_url
+            ))
+            .bearer_auth(&self.token)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub async fn active_inventory(&self, device_id: &str) -> Result<Option<InventoryRun>, String> {
+        let response = self
+            .client
+            .get(format!(
+                "{}/backups/inventory/device/{device_id}/active",
+                self.base_url
+            ))
+            .bearer_auth(&self.token)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?;
+        if response.status() == reqwest::StatusCode::NO_CONTENT {
+            return Ok(None);
+        }
+        Ok(Some(
+            response
+                .error_for_status()
+                .map_err(|e| e.to_string())?
+                .json()
+                .await
+                .map_err(|e| e.to_string())?,
+        ))
+    }
+
+    pub async fn pending_inventory(
+        &self,
+        run_id: &str,
+        device_id: &str,
+        take: usize,
+    ) -> Result<Vec<InventoryPendingItem>, String> {
+        self.client
+            .get(format!(
+                "{}/backups/inventory/runs/{run_id}/pending",
+                self.base_url
+            ))
+            .bearer_auth(&self.token)
+            .query(&[("deviceId", device_id), ("take", &take.to_string())])
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?
+            .json()
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    pub async fn inventory_result(
+        &self,
+        item_id: &str,
+        device_id: &str,
+        succeeded: bool,
+        error: Option<&str>,
+    ) -> Result<(), String> {
+        self.client
+            .post(format!(
+                "{}/backups/inventory/items/{item_id}/result",
+                self.base_url
+            ))
+            .bearer_auth(&self.token)
+            .query(&[("deviceId", device_id)])
+            .json(&serde_json::json!({"succeeded":succeeded,"error":error}))
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -373,6 +521,47 @@ mod tests {
         assert_eq!(std::fs::read(target).unwrap(), b"encrypted");
         pending.assert();
         download.assert();
+        complete.assert();
+    }
+
+    #[tokio::test]
+    async fn registers_complete_inventory_before_file_uploads() {
+        let server = MockServer::start();
+        let start = server.mock(|when, then| {
+            when.method(POST)
+                .path("/api/backups/inventory/runs")
+                .json_body_obj(&serde_json::json!({"deviceId":"device-1"}));
+            then.status(200)
+                .json_body_obj(&serde_json::json!({"id":"run-1","status":"Scanning"}));
+        });
+        let batch = server.mock(|when, then| {
+            when.method(POST)
+                .path("/api/backups/inventory/runs/run-1/files")
+                .body_includes("C:\\\\Work\\\\a.txt");
+            then.status(200)
+                .json_body_obj(&serde_json::json!({"added":1}));
+        });
+        let complete = server.mock(|when, then| {
+            when.method(POST)
+                .path("/api/backups/inventory/runs/run-1/complete");
+            then.status(204);
+        });
+        let client = ApiClient::new(format!("{}/api", server.base_url()), "token".into());
+        let run = client.start_inventory("device-1").await.unwrap();
+        client
+            .add_inventory_batch(
+                &run.id,
+                &[InventoryFile {
+                    path: r"C:\Work\a.txt",
+                    size_bytes: 10,
+                    modified_unix_seconds: Some(1),
+                }],
+            )
+            .await
+            .unwrap();
+        client.complete_inventory(&run.id).await.unwrap();
+        start.assert();
+        batch.assert();
         complete.assert();
     }
 }

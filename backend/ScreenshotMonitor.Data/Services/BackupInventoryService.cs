@@ -52,7 +52,17 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         var rule = await db.BackupPathRules.FirstOrDefaultAsync(x => x.DeviceId == deviceId && x.Path == path);
         if (rule is null) { rule = new BackupPathRule { DeviceId = deviceId, Path = path }; db.BackupPathRules.Add(rule); }
         rule.Action = action; rule.CreatedAt = timeProvider.GetUtcNow().UtcDateTime;
+        await db.SaveChangesAsync();
+        foreach (var run in await db.BackupInventoryRuns.Where(x => x.DeviceId == deviceId && (x.Status == "InventoryReady" || x.Status == "BackingUp")).ToListAsync())
+            await ApplyRulesAsync(run);
         await db.SaveChangesAsync(); return rule;
+    }
+
+    public async Task<bool> StartBackupAsync(string runId)
+    {
+        var run = await db.BackupInventoryRuns.FirstOrDefaultAsync(x => x.Id == runId && x.Status == "InventoryReady");
+        if (run is null) return false;
+        await ApplyRulesAsync(run); run.Status = "BackingUp"; await db.SaveChangesAsync(); return true;
     }
 
     public async Task<InventoryProgress?> ProgressAsync(string runId)
@@ -78,6 +88,30 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
 
     public Task<List<BackupPathRule>> ListRulesAsync(string deviceId) => db.BackupPathRules.AsNoTracking()
         .Where(x => x.DeviceId == deviceId).OrderByDescending(x => x.Path.Length).ToListAsync();
+
+    public Task<BackupInventoryRun?> ActiveRunAsync(string employeeId, string deviceId) => db.BackupInventoryRuns.AsNoTracking()
+        .Where(x => x.EmployeeId == employeeId && x.DeviceId == deviceId && x.Status != "Completed")
+        .OrderByDescending(x => x.StartedAt).FirstOrDefaultAsync();
+
+    public Task<List<BackupInventoryItem>> PendingItemsAsync(string runId, string employeeId, string deviceId, int take = 3) =>
+        db.BackupInventoryItems.AsNoTracking().Where(x => x.RunId == runId && x.Run.EmployeeId == employeeId
+            && x.Run.DeviceId == deviceId && x.Run.Status == "BackingUp" && x.Status == "Pending")
+        .OrderBy(x => x.Path).Take(Math.Clamp(take, 1, 20)).ToListAsync();
+
+    public async Task<bool> RecordResultAsync(string itemId, string employeeId, string deviceId, bool succeeded, string? error)
+    {
+        var item = await db.BackupInventoryItems.Include(x => x.Run).FirstOrDefaultAsync(x => x.Id == itemId
+            && x.Run.EmployeeId == employeeId && x.Run.DeviceId == deviceId && x.Run.Status == "BackingUp" && x.Status == "Pending");
+        if (item is null) return false;
+        item.Status = succeeded ? "BackedUp" : "Failed"; item.Error = succeeded ? null : error;
+        item.BackedUpAt = succeeded ? timeProvider.GetUtcNow().UtcDateTime : null;
+        await db.SaveChangesAsync();
+        if (!await db.BackupInventoryItems.AnyAsync(x => x.RunId == item.RunId && x.Status == "Pending"))
+        {
+            item.Run.Status = "Completed"; item.Run.BackupCompletedAt = timeProvider.GetUtcNow().UtcDateTime; await db.SaveChangesAsync();
+        }
+        return true;
+    }
 
     private async Task ApplyRulesAsync(BackupInventoryRun run)
     {

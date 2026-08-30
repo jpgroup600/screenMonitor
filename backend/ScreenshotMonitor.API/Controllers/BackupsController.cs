@@ -86,9 +86,29 @@ public class BackupsController(BackupService service, BackupRestoreService resto
     public async Task<IActionResult> CompleteInventory(string runId) =>
         await inventoryService.CompleteInventoryAsync(runId, EmployeeId) ? NoContent() : NotFound();
 
+    [Authorize(Roles = "Employee,Admin"), HttpGet("inventory/device/{deviceId}/active")]
+    public async Task<ActionResult<InventoryRunDto>> ActiveInventory(string deviceId)
+    {
+        var run = await inventoryService.ActiveRunAsync(EmployeeId, deviceId);
+        return run is null ? NoContent() : Ok(ToInventoryRun(run));
+    }
+
+    [Authorize(Roles = "Employee,Admin"), HttpGet("inventory/runs/{runId}/pending")]
+    public async Task<ActionResult<IEnumerable<InventoryItemDto>>> PendingInventory(string runId, [FromQuery] string deviceId, [FromQuery] int take = 3) =>
+        Ok((await inventoryService.PendingItemsAsync(runId, EmployeeId, deviceId, take)).Select(x =>
+            new InventoryItemDto(x.Id, x.RunId, x.Path, x.SizeBytes, x.ModifiedUnixSeconds, x.Status, x.Error, x.DiscoveredAt, x.BackedUpAt)));
+
+    [Authorize(Roles = "Employee,Admin"), HttpPost("inventory/items/{itemId}/result")]
+    public async Task<IActionResult> InventoryItemResult(string itemId, [FromQuery] string deviceId, InventoryItemResultDto result) =>
+        await inventoryService.RecordResultAsync(itemId, EmployeeId, deviceId, result.Succeeded, result.Error) ? NoContent() : NotFound();
+
     [Authorize(Roles = "Admin"), HttpGet("inventory/runs")]
     public async Task<ActionResult<IEnumerable<InventoryRunDto>>> InventoryRuns([FromQuery] int take = 50) =>
         Ok((await inventoryService.ListRunsAsync(take)).Select(ToInventoryRun));
+
+    [Authorize(Roles = "Admin"), HttpPost("inventory/runs/{runId}/start-backup")]
+    public async Task<IActionResult> StartInventoryBackup(string runId) =>
+        await inventoryService.StartBackupAsync(runId) ? NoContent() : NotFound();
 
     [Authorize(Roles = "Admin"), HttpGet("inventory/runs/{runId}/progress")]
     public async Task<ActionResult<InventoryProgressDto>> InventoryProgress(string runId)
