@@ -18,6 +18,7 @@ mod service_backup_queue;
 mod service_config;
 mod service_spool;
 mod upload_budget;
+mod usb_evidence;
 
 use monitor::MonitorSession;
 use offline_queue::OfflineQueue;

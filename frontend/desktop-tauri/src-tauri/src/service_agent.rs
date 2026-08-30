@@ -10,7 +10,7 @@ use std::{
     collections::HashSet,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Arc,
+        Arc, Mutex,
     },
     time::Duration,
 };
@@ -47,6 +47,7 @@ async fn collect(
     let mut usb_watcher = None;
     let mut removable_baseline = HashSet::new();
     let mut network_baseline = None;
+    let usb_evidence_pending = Arc::new(Mutex::new(HashSet::new()));
     let mut config_tick = tokio::time::interval(Duration::from_secs(5));
     let mut removable_tick = tokio::time::interval(Duration::from_secs(2));
     let mut network_tick = tokio::time::interval(Duration::from_secs(15));
@@ -96,21 +97,60 @@ async fn collect(
             event = usb_receiver.recv(), if active_config.usb_file_copy_audit_enabled => {
                 if let Some(event) = event {
                     if matches!(event.event_type, "FILE_CREATED" | "FILE_MODIFIED" | "FILE_MOVED") {
-                        let details = serde_json::json!({
-                            "destination": event.destination.map(|path| path.to_string_lossy().into_owned()),
-                            "evidence": "windows_service_removable_filesystem_notification",
-                            "confirmedCopy": false
-                        }).to_string();
-                        let item = ServiceEvent::new("USB_FILE_WRITTEN", event.source.to_string_lossy(), details);
-                        let _ = spool.enqueue(&item);
+                        let source = event.destination.clone().unwrap_or(event.source);
+                        let destination = event.destination;
+                        let accepted = reserve_usb_evidence(&usb_evidence_pending, &source);
+                        if !accepted { continue; }
+                        let event_spool = spool.clone();
+                        let pending = usb_evidence_pending.clone();
+                        tokio::spawn(async move {
+                            for _ in 0..6 {
+                                tokio::time::sleep(Duration::from_secs(10)).await;
+                                if file_has_stabilized(&source, std::time::SystemTime::now(), Duration::from_secs(10)) {
+                                    let evidence_source = source.clone();
+                                    let evidence_destination = destination.clone();
+                                    let details = tokio::task::spawn_blocking(move || {
+                                        crate::usb_evidence::file_write_details(&evidence_source, evidence_destination.as_deref())
+                                    }).await.unwrap_or_else(|_| serde_json::json!({
+                                        "evidence": "windows_service_removable_filesystem_notification",
+                                        "confirmedCopy": false,
+                                        "evidenceError": "metadata_worker_failed"
+                                    }).to_string());
+                                    let item = ServiceEvent::new("USB_FILE_WRITTEN", source.to_string_lossy(), details);
+                                    let _ = event_spool.enqueue(&item);
+                                    if let Ok(mut paths) = pending.lock() { paths.remove(&source); }
+                                    return;
+                                }
+                            }
+                            let item = ServiceEvent::new("USB_FILE_WRITTEN", source.to_string_lossy(), serde_json::json!({
+                                "destination": destination.map(|path| path.to_string_lossy().into_owned()),
+                                "evidence": "windows_service_removable_filesystem_notification",
+                                "confirmedCopy": false,
+                                "evidenceError": "file_unavailable_or_unstable"
+                            }).to_string());
+                            let _ = event_spool.enqueue(&item);
+                            if let Ok(mut paths) = pending.lock() { paths.remove(&source); }
+                        });
                     }
                 }
             }
             _ = removable_tick.tick(), if active_config.usb_audit_enabled => {
                 let current = crate::platform::removable_drives().into_iter().collect::<HashSet<_>>();
                 for (event_type, drive) in drive_changes(&removable_baseline, &current) {
-                    let item = ServiceEvent::new(event_type, drive, serde_json::json!({"evidence":"windows_service_drive_poll"}).to_string());
-                    let _ = spool.enqueue(&item);
+                    let event_spool = spool.clone();
+                    tokio::spawn(async move {
+                        let query_drive = drive.clone();
+                        let device = if event_type == "USB_CONNECTED" {
+                            tokio::task::spawn_blocking(move || crate::usb_evidence::removable_drive_evidence(&query_drive))
+                                .await
+                                .ok()
+                        } else { None };
+                        let details = serde_json::json!({
+                            "evidence": "windows_service_drive_poll",
+                            "usbDevice": device
+                        }).to_string();
+                        let _ = event_spool.enqueue(&ServiceEvent::new(event_type, drive, details));
+                    });
                 }
                 removable_baseline = current;
             }
@@ -161,6 +201,16 @@ fn file_has_stabilized(
         .filter(|metadata| metadata.is_file())
         .and_then(|metadata| metadata.modified().ok())
         .is_some_and(|modified| now.duration_since(modified).is_ok_and(|age| age >= window))
+}
+
+fn reserve_usb_evidence(
+    pending: &Mutex<HashSet<std::path::PathBuf>>,
+    path: &std::path::Path,
+) -> bool {
+    pending
+        .lock()
+        .map(|mut paths| paths.insert(path.to_path_buf()))
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -250,5 +300,15 @@ mod tests {
             modified + Duration::from_secs(11),
             Duration::from_secs(10)
         ));
+    }
+
+    #[test]
+    fn usb_hash_work_is_reserved_once_per_path() {
+        let pending = Mutex::new(HashSet::new());
+        let path = std::path::Path::new(r"E:\large-archive.zip");
+        assert!(reserve_usb_evidence(&pending, path));
+        assert!(!reserve_usb_evidence(&pending, path));
+        pending.lock().unwrap().remove(path);
+        assert!(reserve_usb_evidence(&pending, path));
     }
 }
