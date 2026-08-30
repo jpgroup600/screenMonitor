@@ -7,7 +7,7 @@ using ScreenshotMonitor.Data.Services;
 namespace ScreenshotMonitor.API.Controllers;
 
 [ApiController, Authorize(Roles = "Employee,Admin"), Route("api/backups")]
-public class BackupsController(BackupService service, BackupRestoreService restoreService, BackupInventoryService inventoryService, IBackupObjectStorage storage) : ControllerBase
+public class BackupsController(BackupService service, BackupRestoreService restoreService, BackupInventoryService inventoryService, IBackupObjectStorage storage, AdminAuditService audit) : ControllerBase
 {
     private string EmployeeId => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? throw new UnauthorizedAccessException();
 
@@ -42,6 +42,8 @@ public class BackupsController(BackupService service, BackupRestoreService resto
     {
         var file = await service.GetAsync(id);
         if (file is null) return NotFound();
+        await audit.AppendAndSaveAsync(EmployeeId, "BACKUP_DETAIL_VIEWED", "BackupFile", id, null,
+            new { file.EmployeeId, file.DeviceId, file.OriginalPath, VersionCount = file.Versions.Count });
         return Ok(new BackupFileDetailDto(file.Id, file.EmployeeId, file.Employee.FullName, file.DeviceId,
             file.OriginalPath, file.Versions.Select(version => new BackupVersionDto(version.Id, version.ContentHash,
                 version.PlainSizeBytes, version.SourceModifiedAt, version.UploadedAt)).ToList()));
@@ -51,6 +53,9 @@ public class BackupsController(BackupService service, BackupRestoreService resto
     public async Task<ActionResult<BackupRestoreResponseDto>> RequestRestore(BackupRestoreRequestDto request)
     {
         var restore = await restoreService.RequestAsync(request.FileVersionId);
+        if (restore is not null)
+            await audit.AppendAndSaveAsync(EmployeeId, "BACKUP_RESTORE_REQUESTED", "BackupRestoreRequest", restore.Id, null,
+                new { restore.FileVersionId, restore.EmployeeId, restore.DeviceId, restore.OriginalPath });
         return restore is null ? NotFound() : Ok(ToRestoreResponse(restore));
     }
 
@@ -107,8 +112,12 @@ public class BackupsController(BackupService service, BackupRestoreService resto
         Ok((await inventoryService.ListRunsAsync(take)).Select(ToInventoryRun));
 
     [Authorize(Roles = "Admin"), HttpPost("inventory/runs/{runId}/start-backup")]
-    public async Task<IActionResult> StartInventoryBackup(string runId) =>
-        await inventoryService.StartBackupAsync(runId) ? NoContent() : NotFound();
+    public async Task<IActionResult> StartInventoryBackup(string runId)
+    {
+        if (!await inventoryService.StartBackupAsync(runId)) return NotFound();
+        await audit.AppendAndSaveAsync(EmployeeId, "INVENTORY_BACKUP_STARTED", "BackupInventoryRun", runId, null, new { Status = "BackingUp" });
+        return NoContent();
+    }
 
     [Authorize(Roles = "Admin"), HttpGet("inventory/runs/{runId}/progress")]
     public async Task<ActionResult<InventoryProgressDto>> InventoryProgress(string runId)
@@ -130,14 +139,24 @@ public class BackupsController(BackupService service, BackupRestoreService resto
     [Authorize(Roles = "Admin"), HttpPut("inventory/rules")]
     public async Task<ActionResult<BackupPathRuleDto>> SetInventoryRule(SetBackupPathRuleDto request)
     {
-        try { return Ok(ToRule(await inventoryService.SetRuleAsync(request.DeviceId, request.Path, request.Action))); }
+        try {
+            var rule = await inventoryService.SetRuleAsync(request.DeviceId, request.Path, request.Action);
+            await audit.AppendAndSaveAsync(EmployeeId, "BACKUP_PATH_RULE_UPDATED", "Device", request.DeviceId, null,
+                new { request.Path, request.Action });
+            return Ok(ToRule(rule));
+        }
         catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
     }
 
     [Authorize(Roles = "Admin"), HttpPut("inventory/rules/bulk")]
     public async Task<ActionResult> SetInventoryRules(SetBackupPathRulesDto request)
     {
-        try { return Ok(new { updated = await inventoryService.SetRulesAsync(request.DeviceId, request.Paths, request.Action) }); }
+        try {
+            var updated = await inventoryService.SetRulesAsync(request.DeviceId, request.Paths, request.Action);
+            await audit.AppendAndSaveAsync(EmployeeId, "BACKUP_PATH_RULES_BULK_UPDATED", "Device", request.DeviceId, null,
+                new { request.Action, PathCount = request.Paths.Count, Updated = updated });
+            return Ok(new { updated });
+        }
         catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
     }
 

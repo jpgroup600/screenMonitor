@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
@@ -12,7 +10,7 @@ using ScreenshotMonitor.Data.Entities;
 
 namespace ScreenshotMonitor.Data.Services;
 
-public class DeviceSecurityPolicyService(SmDbContext db, TimeProvider timeProvider)
+public class DeviceSecurityPolicyService(SmDbContext db, TimeProvider timeProvider, AdminAuditService audit)
 {
     public async Task<DeviceSecurityPolicy> GetForEmployeeAsync(string employeeId, string deviceId)
     {
@@ -45,44 +43,14 @@ public class DeviceSecurityPolicyService(SmDbContext db, TimeProvider timeProvid
         policy.UpdatedByAdminId = adminId;
         policy.UpdatedAt = timeProvider.GetUtcNow().UtcDateTime;
         var after = Snapshot(policy);
-        await AppendAuditAsync(adminId, "DEVICE_SECURITY_POLICY_UPDATED", "Device", deviceId, before, after, policy.UpdatedAt);
+        await audit.AppendAsync(adminId, "DEVICE_SECURITY_POLICY_UPDATED", "Device", deviceId, before, after);
         await db.SaveChangesAsync();
         return policy;
     }
 
-    public Task<List<AdminAuditLog>> ListAuditAsync(int take = 200) => db.AdminAuditLogs.AsNoTracking()
-        .OrderByDescending(x => x.OccurredAt).Take(Math.Clamp(take, 1, 500)).ToListAsync();
+    public Task<List<AdminAuditLog>> ListAuditAsync(int take = 200) => audit.ListAsync(take);
 
-    public async Task<bool> VerifyAuditChainAsync()
-    {
-        var entries = await db.AdminAuditLogs.AsNoTracking().OrderBy(x => x.Sequence).ToListAsync();
-        var previousHash = new string('0', 64);
-        foreach (var entry in entries)
-        {
-            if (entry.PreviousHash != previousHash || entry.EntryHash != ComputeHash(
-                previousHash, entry.OccurredAt, entry.AdminId, entry.Action, entry.TargetType,
-                entry.TargetId, entry.BeforeJson, entry.AfterJson)) return false;
-            previousHash = entry.EntryHash;
-        }
-        return true;
-    }
-
-    private async Task AppendAuditAsync(string adminId, string action, string targetType, string targetId, string before, string after, DateTime occurredAt)
-    {
-        var previous = await db.AdminAuditLogs.OrderByDescending(x => x.Sequence).Select(x => new { x.Sequence, x.EntryHash }).FirstOrDefaultAsync();
-        var previousHash = previous?.EntryHash ?? new string('0', 64);
-        var entryHash = ComputeHash(previousHash, occurredAt, adminId, action, targetType, targetId, before, after);
-        db.AdminAuditLogs.Add(new AdminAuditLog {
-            Sequence = (previous?.Sequence ?? 0) + 1, AdminId = adminId, Action = action, TargetType = targetType, TargetId = targetId,
-            BeforeJson = before, AfterJson = after, PreviousHash = previousHash, EntryHash = entryHash, OccurredAt = occurredAt
-        });
-    }
-
-    private static string ComputeHash(string previousHash, DateTime occurredAt, string adminId, string action, string targetType, string targetId, string before, string after)
-    {
-        var canonical = string.Join("|", previousHash, occurredAt.ToUniversalTime().ToString("O"), adminId, action, targetType, targetId, before, after);
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant();
-    }
+    public Task<bool> VerifyAuditChainAsync() => audit.VerifyChainAsync();
 
     private static DeviceSecurityPolicy Default(string deviceId) => new() { DeviceId = deviceId };
 

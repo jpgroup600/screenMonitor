@@ -13,7 +13,7 @@ public class DeviceSecurityPolicyServiceTests
     public async Task New_device_uses_safe_enabled_defaults_without_creating_mutable_policy()
     {
         await using var db = CreateDb(); await SeedAsync(db);
-        var policy = await new DeviceSecurityPolicyService(db, TimeProvider.System).GetForEmployeeAsync("employee-1", "device-1");
+        var policy = await CreateService(db, TimeProvider.System).GetForEmployeeAsync("employee-1", "device-1");
         Assert.True(policy.MonitoringEnabled); Assert.True(policy.BackupEnabled); Assert.True(policy.UsbAuditEnabled);
         Assert.Empty(db.DeviceSecurityPolicies);
     }
@@ -22,7 +22,7 @@ public class DeviceSecurityPolicyServiceTests
     public async Task Employee_cannot_read_another_employees_device_policy()
     {
         await using var db = CreateDb(); await SeedAsync(db);
-        var service = new DeviceSecurityPolicyService(db, TimeProvider.System);
+        var service = CreateService(db, TimeProvider.System);
         await Assert.ThrowsAsync<UnauthorizedAccessException>(() => service.GetForEmployeeAsync("employee-2", "device-1"));
     }
 
@@ -31,7 +31,7 @@ public class DeviceSecurityPolicyServiceTests
     {
         await using var db = CreateDb(); await SeedAsync(db);
         var now = new DateTimeOffset(2026, 8, 31, 4, 0, 0, TimeSpan.Zero);
-        var service = new DeviceSecurityPolicyService(db, new FakeTimeProvider(now));
+        var service = CreateService(db, new FakeTimeProvider(now));
         var update = Update(monitoring: true, screenshots: false, backup: false, usb: true, network: false);
 
         var policy = await service.UpdateAsync("admin-1", "device-1", update);
@@ -49,7 +49,7 @@ public class DeviceSecurityPolicyServiceTests
     {
         await using var db = CreateDb(); await SeedAsync(db);
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 31, 4, 0, 0, TimeSpan.Zero));
-        var service = new DeviceSecurityPolicyService(db, clock);
+        var service = CreateService(db, clock);
         await service.UpdateAsync("admin-1", "device-1", Update(backup: false));
         clock.Advance(TimeSpan.FromMinutes(1));
         await service.UpdateAsync("admin-1", "device-1", Update(backup: true));
@@ -76,6 +76,8 @@ public class DeviceSecurityPolicyServiceTests
     }
 
     private static SmDbContext CreateDb() => new(new DbContextOptionsBuilder<SmDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+    private static DeviceSecurityPolicyService CreateService(SmDbContext db, TimeProvider clock) =>
+        new(db, clock, new AdminAuditService(db, clock));
     private sealed class FakeTimeProvider(DateTimeOffset now) : TimeProvider
     {
         private DateTimeOffset current = now;

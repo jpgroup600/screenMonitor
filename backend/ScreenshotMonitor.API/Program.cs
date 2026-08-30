@@ -48,6 +48,7 @@ builder.Services.AddScoped<BackupRestoreService>();
 builder.Services.AddScoped<BackupService>();
 builder.Services.AddScoped<BackupInventoryService>();
 builder.Services.AddScoped<DeviceSecurityPolicyService>();
+builder.Services.AddScoped<AdminAuditService>();
 builder.Services.AddSingleton<IBackupObjectStorage, RailwayBucketStorage>();
 
 
