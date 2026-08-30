@@ -24,7 +24,10 @@ impl ServiceEvent {
     pub fn new(event_type: impl Into<String>, source: impl Into<String>, details: String) -> Self {
         let occurred_at_unix_ms = now_millis();
         Self {
-            id: format!("{occurred_at_unix_ms:020}-{:06}", NEXT_ID.fetch_add(1, Ordering::Relaxed)),
+            id: format!(
+                "{occurred_at_unix_ms:020}-{:06}",
+                NEXT_ID.fetch_add(1, Ordering::Relaxed)
+            ),
             event_type: event_type.into(),
             source: source.into(),
             details,
@@ -46,7 +49,10 @@ impl ServiceSpool {
 
     fn with_limit(directory: PathBuf, max_bytes: u64) -> Result<Self, String> {
         fs::create_dir_all(&directory).map_err(|error| error.to_string())?;
-        Ok(Self { directory, max_bytes })
+        Ok(Self {
+            directory,
+            max_bytes,
+        })
     }
 
     pub fn enqueue(&self, event: &ServiceEvent) -> Result<PathBuf, String> {
@@ -100,7 +106,9 @@ impl ServiceSpool {
                 .map_err(|error| error.to_string())
         })?;
         for path in files {
-            if total <= self.max_bytes { break; }
+            if total <= self.max_bytes {
+                break;
+            }
             let size = fs::metadata(&path).map(|value| value.len()).unwrap_or(0);
             fs::remove_file(path).map_err(|error| error.to_string())?;
             total = total.saturating_sub(size);
@@ -127,7 +135,10 @@ mod tests {
         let event = ServiceEvent::new("FILE_MODIFIED", r"C:\Work\plan.txt", "{}".into());
         let path = spool.enqueue(&event).unwrap();
 
-        assert_ne!(fs::read(&path).unwrap(), serde_json::to_vec(&event).unwrap());
+        assert_ne!(
+            fs::read(&path).unwrap(),
+            serde_json::to_vec(&event).unwrap()
+        );
         assert_eq!(spool.read(&path).unwrap(), event);
         assert_eq!(spool.pending().unwrap(), vec![path.clone()]);
         spool.complete(&path).unwrap();
@@ -147,7 +158,9 @@ mod tests {
     fn bounded_spool_removes_oldest_events() {
         let directory = tempfile::tempdir().unwrap();
         let spool = ServiceSpool::with_limit(directory.path().to_path_buf(), 1).unwrap();
-        spool.enqueue(&ServiceEvent::new("FILE_CREATED", "a.txt", "{}".into())).unwrap();
+        spool
+            .enqueue(&ServiceEvent::new("FILE_CREATED", "a.txt", "{}".into()))
+            .unwrap();
         assert!(spool.pending().unwrap().is_empty());
     }
 }

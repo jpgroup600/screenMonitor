@@ -24,6 +24,8 @@ pub struct MonitorSession {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MonitoringPolicy {
+    #[serde(default)]
+    pub backup_enabled: bool,
     pub screenshots_enabled: bool,
     pub active_app_tracking_enabled: bool,
     pub idle_tracking_enabled: bool,
@@ -287,7 +289,11 @@ async fn retry_service_events(
             "occurredAtUnixMs": event.occurred_at_unix_ms,
             "payload": serde_json::from_str::<serde_json::Value>(&event.details).unwrap_or_else(|_| serde_json::Value::String(event.details.clone()))
         }).to_string();
-        if api.security_event(device_id, &event.event_type, &event.source, &details).await.is_err() {
+        if api
+            .security_event(device_id, &event.event_type, &event.source, &details)
+            .await
+            .is_err()
+        {
             break;
         }
         spool.complete(&path)?;
@@ -304,6 +310,7 @@ mod tests {
     fn monitoring_policy_deserializes_independent_admin_switches() {
         let policy: MonitoringPolicy = serde_json::from_value(serde_json::json!({
             "screenshotsEnabled": false,
+            "backupEnabled": true,
             "activeAppTrackingEnabled": true,
             "idleTrackingEnabled": false,
             "networkAuditEnabled": true,
@@ -314,6 +321,7 @@ mod tests {
         }))
         .unwrap();
         assert!(!policy.screenshots_enabled);
+        assert!(policy.backup_enabled);
         assert!(policy.active_app_tracking_enabled);
         assert!(!policy.idle_tracking_enabled);
         assert!(policy.network_audit_enabled);
@@ -322,7 +330,6 @@ mod tests {
         assert!(policy.usb_audit_enabled);
         assert!(!policy.usb_file_copy_audit_enabled);
     }
-
 
     #[tokio::test]
     async fn service_spool_deletes_only_events_accepted_by_server() {
@@ -333,15 +340,21 @@ mod tests {
         });
         let directory = tempfile::tempdir().unwrap();
         let spool = ServiceSpool::new(directory.path().to_path_buf()).unwrap();
-        spool.enqueue(&crate::service_spool::ServiceEvent::new(
-            "FILE_MODIFIED", r"C:\Work\plan.txt", "{}".into()
-        )).unwrap();
+        spool
+            .enqueue(&crate::service_spool::ServiceEvent::new(
+                "FILE_MODIFIED",
+                r"C:\Work\plan.txt",
+                "{}".into(),
+            ))
+            .unwrap();
 
         retry_service_events(
             &ApiClient::new(format!("{}/api", server.base_url()), "token".into()),
             &spool,
             "device-1",
-        ).await.unwrap();
+        )
+        .await
+        .unwrap();
 
         accepted.assert();
         assert!(spool.pending().unwrap().is_empty());

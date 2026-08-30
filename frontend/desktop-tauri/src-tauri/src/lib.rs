@@ -11,17 +11,19 @@ mod monitor;
 mod network_audit;
 mod offline_queue;
 mod platform;
-mod service_spool;
-mod service_config;
-mod upload_budget;
 #[cfg(windows)]
 pub mod service_agent;
+mod service_backup_queue;
+mod service_config;
+mod service_spool;
+mod upload_budget;
 
 use monitor::MonitorSession;
 use offline_queue::OfflineQueue;
+use serde::Serialize;
+use service_backup_queue::ServiceBackupQueue;
 use service_config::ServiceConfig;
 use service_spool::ServiceSpool;
-use serde::Serialize;
 use std::path::PathBuf;
 use std::{
     sync::{
@@ -50,6 +52,7 @@ struct AppState {
     service_config_path: PathBuf,
     service_spool: Arc<ServiceSpool>,
     upload_budget: upload_budget::UploadBudget,
+    service_backups: Arc<ServiceBackupQueue>,
 }
 
 impl AppState {
@@ -87,11 +90,15 @@ impl AppState {
             service_config_path: shared_directory.join("agent-policy.dat"),
             service_spool: Arc::new(ServiceSpool::new(shared_directory.join("service-spool"))?),
             upload_budget: upload_budget::UploadBudget::new(upload_budget_path),
+            service_backups: Arc::new(ServiceBackupQueue::new(
+                shared_directory.join("service-backups"),
+            )?),
         })
     }
 
     fn save_service_policy(&self, policy: &monitor::MonitoringPolicy) -> Result<(), String> {
         ServiceConfig {
+            backup_enabled: policy.backup_enabled,
             file_change_audit_enabled: policy.file_change_audit_enabled,
             network_audit_enabled: policy.network_audit_enabled,
             usb_audit_enabled: policy.usb_audit_enabled,
@@ -122,7 +129,8 @@ fn agent_status(state: State<'_, AppState>) -> Result<AgentStatus, String> {
         .lock()
         .map_err(|error| error.to_string())?
         .is_some();
-    let (agent_mode, monitoring_state) = resolve_agent_runtime(user_session_running, windows_service_state());
+    let (agent_mode, monitoring_state) =
+        resolve_agent_runtime(user_session_running, windows_service_state());
     Ok(AgentStatus {
         agent_version: env!("CARGO_PKG_VERSION"),
         agent_mode,
@@ -131,9 +139,20 @@ fn agent_status(state: State<'_, AppState>) -> Result<AgentStatus, String> {
     })
 }
 
-fn resolve_agent_runtime(user_session_running: bool, service_running: Option<bool>) -> (String, String) {
-    let mode = if service_running.is_some() { "WindowsService+UserSession" } else { "UserSession" };
-    let state = if user_session_running || service_running == Some(true) { "Running" } else { "Stopped" };
+fn resolve_agent_runtime(
+    user_session_running: bool,
+    service_running: Option<bool>,
+) -> (String, String) {
+    let mode = if service_running.is_some() {
+        "WindowsService+UserSession"
+    } else {
+        "UserSession"
+    };
+    let state = if user_session_running || service_running == Some(true) {
+        "Running"
+    } else {
+        "Stopped"
+    };
     (mode.to_owned(), state.to_owned())
 }
 
@@ -143,14 +162,22 @@ fn windows_service_state() -> Option<bool> {
         service::{ServiceAccess, ServiceState},
         service_manager::{ServiceManager, ServiceManagerAccess},
     };
-    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT).ok()?;
-    let service = manager.open_service("ScreenMonitorAgent", ServiceAccess::QUERY_STATUS).ok()?;
+    let manager =
+        ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT).ok()?;
+    let service = manager
+        .open_service("ScreenMonitorAgent", ServiceAccess::QUERY_STATUS)
+        .ok()?;
     let status = service.query_status().ok()?;
-    Some(matches!(status.current_state, ServiceState::Running | ServiceState::StartPending))
+    Some(matches!(
+        status.current_state,
+        ServiceState::Running | ServiceState::StartPending
+    ))
 }
 
 #[cfg(not(windows))]
-fn windows_service_state() -> Option<bool> { None }
+fn windows_service_state() -> Option<bool> {
+    None
+}
 
 #[cfg(test)]
 mod agent_runtime_tests {
@@ -158,9 +185,18 @@ mod agent_runtime_tests {
 
     #[test]
     fn reports_hybrid_mode_when_service_is_installed() {
-        assert_eq!(resolve_agent_runtime(false, Some(true)), ("WindowsService+UserSession".into(), "Running".into()));
-        assert_eq!(resolve_agent_runtime(true, Some(false)), ("WindowsService+UserSession".into(), "Running".into()));
-        assert_eq!(resolve_agent_runtime(false, None), ("UserSession".into(), "Stopped".into()));
+        assert_eq!(
+            resolve_agent_runtime(false, Some(true)),
+            ("WindowsService+UserSession".into(), "Running".into())
+        );
+        assert_eq!(
+            resolve_agent_runtime(true, Some(false)),
+            ("WindowsService+UserSession".into(), "Running".into())
+        );
+        assert_eq!(
+            resolve_agent_runtime(false, None),
+            ("UserSession".into(), "Stopped".into())
+        );
     }
 }
 
@@ -334,6 +370,7 @@ async fn run_incremental_backup(
             inaccessible_entries: 0,
         });
     }
+    let service_backups = state.service_backups.clone();
     let inventory = tauri::async_runtime::spawn_blocking(move || {
         let policy = backup_policy::BackupPolicy::default();
         let mut inventory = backup_inventory::InventoryResult::default();
@@ -347,6 +384,21 @@ async fn run_incremental_backup(
             inventory.skipped_entries += partial.skipped_entries;
             inventory.inaccessible_entries += partial.inaccessible_entries;
         }
+        if let Ok(service_files) = service_backups.inventory_files() {
+            let existing = inventory
+                .files
+                .iter()
+                .map(|file| file.path.clone())
+                .collect::<std::collections::HashSet<_>>();
+            inventory.files.extend(
+                service_files
+                    .into_iter()
+                    .filter(|file| !existing.contains(&file.path)),
+            );
+        }
+        inventory
+            .files
+            .sort_by(|left, right| left.path.cmp(&right.path));
         inventory
     })
     .await
@@ -586,7 +638,14 @@ async fn process_inventory_backup(
     state: State<'_, AppState>,
 ) -> Result<IncrementalBackupResult, String> {
     if resource_throttling_enabled && pause_backup_on_battery && platform::on_battery() {
-        return Ok(IncrementalBackupResult { scanned_files: 0, changed_files: 0, uploaded_files: 0, failed_files: 0, skipped_entries: 0, inaccessible_entries: 0 });
+        return Ok(IncrementalBackupResult {
+            scanned_files: 0,
+            changed_files: 0,
+            uploaded_files: 0,
+            failed_files: 0,
+            skipped_entries: 0,
+            inaccessible_entries: 0,
+        });
     }
     let client = api::ApiClient::new(BACKEND_URL.into(), token);
     let Some(run) = client.active_inventory(&device_id).await? else {
@@ -614,21 +673,49 @@ async fn process_inventory_backup(
     let mut failed = 0;
     for item in items {
         let source = PathBuf::from(&item.path);
-        if resource_throttling_enabled && !state.upload_budget.allows(
-            item.size_bytes,
-            daily_upload_limit_bytes.max(1024 * 1024),
-            std::time::SystemTime::now(),
-        )? { continue; }
-        if !backup_file_is_stable(
-            &source,
-            item.size_bytes,
-            item.modified_unix_seconds,
-            std::time::SystemTime::now(),
-            BACKUP_STABILITY_WINDOW,
-        ) {
+        if resource_throttling_enabled
+            && !state.upload_budget.allows(
+                item.size_bytes,
+                daily_upload_limit_bytes.max(1024 * 1024),
+                std::time::SystemTime::now(),
+            )?
+        {
+            continue;
+        }
+        let staged_by_service =
+            state
+                .service_backups
+                .find(&source, item.size_bytes, item.modified_unix_seconds)?;
+        if staged_by_service.is_none()
+            && !backup_file_is_stable(
+                &source,
+                item.size_bytes,
+                item.modified_unix_seconds,
+                std::time::SystemTime::now(),
+                BACKUP_STABILITY_WINDOW,
+            )
+        {
             continue;
         }
         let result = async {
+            if let Some((job_path, pending)) = staged_by_service {
+                let upload = client
+                    .upload_backup(
+                        &device_id,
+                        &item.path,
+                        &pending.content_hash,
+                        pending.plain_size_bytes,
+                        pending.source_modified_unix_seconds,
+                        &pending.container_path,
+                    )
+                    .await;
+                if upload.is_ok() {
+                    state
+                        .service_backups
+                        .complete(&job_path, &pending.container_path)?;
+                }
+                return upload.map(|_| pending.content_hash);
+            }
             let staged = backup_staging::stage_file(&source, &state.backup_staging_directory)?;
             let upload = client
                 .upload_backup(
@@ -650,7 +737,9 @@ async fn process_inventory_backup(
             Ok(content_hash) => {
                 uploaded += 1;
                 if resource_throttling_enabled {
-                    state.upload_budget.record(item.size_bytes, std::time::SystemTime::now())?;
+                    state
+                        .upload_budget
+                        .record(item.size_bytes, std::time::SystemTime::now())?;
                 }
                 let mut manifest =
                     backup_manifest::BackupManifest::load(&state.backup_manifest_path)?;
@@ -692,14 +781,26 @@ fn backup_file_is_stable(
     now: std::time::SystemTime,
     stability_window: Duration,
 ) -> bool {
-    let Ok(metadata) = std::fs::metadata(source) else { return false };
-    if !metadata.is_file() || metadata.len() != expected_size { return false; }
-    let Ok(modified) = metadata.modified() else { return false };
-    let current_modified = modified.duration_since(std::time::UNIX_EPOCH).ok().map(|value| value.as_secs());
-    if expected_modified_unix_seconds.is_some() && current_modified != expected_modified_unix_seconds {
+    let Ok(metadata) = std::fs::metadata(source) else {
+        return false;
+    };
+    if !metadata.is_file() || metadata.len() != expected_size {
         return false;
     }
-    now.duration_since(modified).is_ok_and(|age| age >= stability_window)
+    let Ok(modified) = metadata.modified() else {
+        return false;
+    };
+    let current_modified = modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|value| value.as_secs());
+    if expected_modified_unix_seconds.is_some()
+        && current_modified != expected_modified_unix_seconds
+    {
+        return false;
+    }
+    now.duration_since(modified)
+        .is_ok_and(|age| age >= stability_window)
 }
 
 #[cfg(test)]
@@ -713,11 +814,32 @@ mod backup_stability_tests {
         std::fs::write(&source, b"company-plan").unwrap();
         let metadata = std::fs::metadata(&source).unwrap();
         let modified = metadata.modified().unwrap();
-        let modified_seconds = modified.duration_since(std::time::UNIX_EPOCH).ok().map(|value| value.as_secs());
+        let modified_seconds = modified
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()
+            .map(|value| value.as_secs());
 
-        assert!(!backup_file_is_stable(&source, metadata.len() + 1, modified_seconds, modified + Duration::from_secs(20), BACKUP_STABILITY_WINDOW));
-        assert!(!backup_file_is_stable(&source, metadata.len(), modified_seconds, modified + Duration::from_secs(5), BACKUP_STABILITY_WINDOW));
-        assert!(backup_file_is_stable(&source, metadata.len(), modified_seconds, modified + Duration::from_secs(11), BACKUP_STABILITY_WINDOW));
+        assert!(!backup_file_is_stable(
+            &source,
+            metadata.len() + 1,
+            modified_seconds,
+            modified + Duration::from_secs(20),
+            BACKUP_STABILITY_WINDOW
+        ));
+        assert!(!backup_file_is_stable(
+            &source,
+            metadata.len(),
+            modified_seconds,
+            modified + Duration::from_secs(5),
+            BACKUP_STABILITY_WINDOW
+        ));
+        assert!(backup_file_is_stable(
+            &source,
+            metadata.len(),
+            modified_seconds,
+            modified + Duration::from_secs(11),
+            BACKUP_STABILITY_WINDOW
+        ));
     }
 }
 

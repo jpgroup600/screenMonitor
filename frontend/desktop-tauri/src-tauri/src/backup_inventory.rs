@@ -24,7 +24,11 @@ pub fn scan(root: &Path, policy: &BackupPolicy) -> InventoryResult {
     scan_throttled(root, policy, Duration::ZERO)
 }
 
-pub fn scan_throttled(root: &Path, policy: &BackupPolicy, delay_per_entry: Duration) -> InventoryResult {
+pub fn scan_throttled(
+    root: &Path,
+    policy: &BackupPolicy,
+    delay_per_entry: Duration,
+) -> InventoryResult {
     let mut result = InventoryResult::default();
     scan_directory(root, policy, delay_per_entry, &mut result);
     result
@@ -33,7 +37,12 @@ pub fn scan_throttled(root: &Path, policy: &BackupPolicy, delay_per_entry: Durat
     result
 }
 
-fn scan_directory(directory: &Path, policy: &BackupPolicy, delay_per_entry: Duration, result: &mut InventoryResult) {
+fn scan_directory(
+    directory: &Path,
+    policy: &BackupPolicy,
+    delay_per_entry: Duration,
+    result: &mut InventoryResult,
+) {
     if !policy.should_include(directory, None) {
         result.skipped_entries += 1;
         return;
@@ -48,7 +57,9 @@ fn scan_directory(directory: &Path, policy: &BackupPolicy, delay_per_entry: Dura
     };
 
     for entry in entries {
-        if !delay_per_entry.is_zero() { std::thread::sleep(delay_per_entry); }
+        if !delay_per_entry.is_zero() {
+            std::thread::sleep(delay_per_entry);
+        }
         let entry = match entry {
             Ok(entry) => entry,
             Err(_) => {

@@ -1,10 +1,14 @@
 use crate::data_protection::{protect_machine, unprotect_machine};
 use serde::{Deserialize, Serialize};
-use std::{fs, path::{Path, PathBuf}};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct ServiceConfig {
+    pub backup_enabled: bool,
     pub file_change_audit_enabled: bool,
     pub network_audit_enabled: bool,
     pub usb_audit_enabled: bool,
@@ -28,7 +32,9 @@ impl ServiceConfig {
     }
 
     pub fn load(path: &Path) -> Result<Self, String> {
-        if !path.exists() { return Ok(Self::default()); }
+        if !path.exists() {
+            return Ok(Self::default());
+        }
         let protected = fs::read(path).map_err(|error| error.to_string())?;
         let serialized = unprotect_machine(&protected)?;
         serde_json::from_slice(&serialized).map_err(|error| error.to_string())
@@ -49,7 +55,10 @@ mod tests {
     #[test]
     fn missing_config_is_safe_and_disables_collection() {
         let directory = tempfile::tempdir().unwrap();
-        assert_eq!(ServiceConfig::load(&directory.path().join("missing.dat")).unwrap(), ServiceConfig::default());
+        assert_eq!(
+            ServiceConfig::load(&directory.path().join("missing.dat")).unwrap(),
+            ServiceConfig::default()
+        );
     }
 
     #[test]
@@ -57,6 +66,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("agent-policy.dat");
         let config = ServiceConfig {
+            backup_enabled: true,
             file_change_audit_enabled: true,
             network_audit_enabled: true,
             usb_audit_enabled: true,
@@ -64,7 +74,10 @@ mod tests {
             roots: vec![r"C:\".into()],
         };
         config.save(&path).unwrap();
-        assert_ne!(fs::read(&path).unwrap(), serde_json::to_vec(&config).unwrap());
+        assert_ne!(
+            fs::read(&path).unwrap(),
+            serde_json::to_vec(&config).unwrap()
+        );
         assert_eq!(ServiceConfig::load(&path).unwrap(), config);
         assert!(!path.with_extension("pending").exists());
     }

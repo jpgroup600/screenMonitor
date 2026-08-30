@@ -9,7 +9,10 @@ pub(crate) fn protect_machine(input: &[u8]) -> Result<Vec<u8>, String> {
     use windows_sys::Win32::Security::Cryptography::{
         CRYPTPROTECT_LOCAL_MACHINE, CRYPTPROTECT_UI_FORBIDDEN,
     };
-    protect_with_flags(input, CRYPTPROTECT_UI_FORBIDDEN | CRYPTPROTECT_LOCAL_MACHINE)
+    protect_with_flags(
+        input,
+        CRYPTPROTECT_UI_FORBIDDEN | CRYPTPROTECT_LOCAL_MACHINE,
+    )
 }
 
 #[cfg(windows)]
@@ -98,7 +101,6 @@ pub(crate) fn protect(input: &[u8]) -> Result<Vec<u8>, String> {
 pub(crate) fn unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
     Ok(input.to_vec())
 }
-
 
 #[cfg(not(windows))]
 pub(crate) fn protect_machine(input: &[u8]) -> Result<Vec<u8>, String> {

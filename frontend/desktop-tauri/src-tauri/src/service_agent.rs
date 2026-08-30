@@ -1,7 +1,19 @@
 #![cfg(windows)]
 
-use crate::{file_change_audit, service_config::{program_data_directory, ServiceConfig}, service_spool::{ServiceEvent, ServiceSpool}};
-use std::{collections::HashSet, sync::{Arc, atomic::{AtomicBool, Ordering}}, time::Duration};
+use crate::{
+    file_change_audit,
+    service_backup_queue::ServiceBackupQueue,
+    service_config::{program_data_directory, ServiceConfig},
+    service_spool::{ServiceEvent, ServiceSpool},
+};
+use std::{
+    collections::HashSet,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 pub fn run_collector(running: Arc<AtomicBool>) -> Result<(), String> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
@@ -12,9 +24,13 @@ pub fn run_collector(running: Arc<AtomicBool>) -> Result<(), String> {
 }
 
 async fn collect(running: Arc<AtomicBool>) -> Result<(), String> {
+    if !running.load(Ordering::SeqCst) {
+        return Ok(());
+    }
     let data_directory = program_data_directory();
     let config_path = data_directory.join("agent-policy.dat");
     let spool = ServiceSpool::new(data_directory.join("service-spool"))?;
+    let backups = ServiceBackupQueue::new(data_directory.join("service-backups"))?;
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
     let (usb_sender, mut usb_receiver) = tokio::sync::mpsc::unbounded_channel();
     let mut active_config = ServiceConfig::default();
@@ -31,7 +47,7 @@ async fn collect(running: Arc<AtomicBool>) -> Result<(), String> {
             _ = config_tick.tick() => {
                 let next = ServiceConfig::load(&config_path).unwrap_or_default();
                 if next != active_config {
-                    watcher = if next.file_change_audit_enabled {
+                    watcher = if next.file_change_audit_enabled || next.backup_enabled {
                         file_change_audit::start(&next.roots, sender.clone()).ok()
                     } else { None };
                     let removable = crate::platform::removable_drives();
@@ -43,14 +59,24 @@ async fn collect(running: Arc<AtomicBool>) -> Result<(), String> {
                     active_config = next;
                 }
             }
-            event = receiver.recv(), if active_config.file_change_audit_enabled => {
+            event = receiver.recv(), if active_config.file_change_audit_enabled || active_config.backup_enabled => {
                 if let Some(event) = event {
-                    let details = serde_json::json!({
-                        "destination": event.destination.map(|path| path.to_string_lossy().into_owned()),
-                        "evidence": "windows_service_filesystem_notification"
-                    }).to_string();
-                    let item = ServiceEvent::new(event.event_type, event.source.to_string_lossy(), details);
-                    let _ = spool.enqueue(&item);
+                    if active_config.file_change_audit_enabled {
+                        let details = serde_json::json!({
+                            "destination": event.destination.as_ref().map(|path| path.to_string_lossy().into_owned()),
+                            "evidence": "windows_service_filesystem_notification"
+                        }).to_string();
+                        let item = ServiceEvent::new(event.event_type, event.source.to_string_lossy(), details);
+                        let _ = spool.enqueue(&item);
+                    }
+                    if active_config.backup_enabled && matches!(event.event_type, "FILE_CREATED" | "FILE_MODIFIED" | "FILE_MOVED") {
+                        let source = event.destination.unwrap_or(event.source);
+                        let queue = backups.clone();
+                        tokio::spawn(async move {
+                            tokio::time::sleep(Duration::from_secs(10)).await;
+                            let _ = tokio::task::spawn_blocking(move || queue.stage(&source)).await;
+                        });
+                    }
                 }
             }
             event = usb_receiver.recv(), if active_config.usb_file_copy_audit_enabled => {
@@ -94,10 +120,18 @@ async fn collect(running: Arc<AtomicBool>) -> Result<(), String> {
     Ok(())
 }
 
-fn drive_changes(previous: &HashSet<String>, current: &HashSet<String>) -> Vec<(&'static str, String)> {
-    let mut changes = current.difference(previous)
+fn drive_changes(
+    previous: &HashSet<String>,
+    current: &HashSet<String>,
+) -> Vec<(&'static str, String)> {
+    let mut changes = current
+        .difference(previous)
         .map(|drive| ("USB_CONNECTED", drive.clone()))
-        .chain(previous.difference(current).map(|drive| ("USB_DISCONNECTED", drive.clone())))
+        .chain(
+            previous
+                .difference(current)
+                .map(|drive| ("USB_DISCONNECTED", drive.clone())),
+        )
         .collect::<Vec<_>>();
     changes.sort_by(|left, right| left.1.cmp(&right.1));
     changes
@@ -110,17 +144,20 @@ mod tests {
     #[test]
     fn stopped_collector_exits_without_collecting() {
         let running = Arc::new(AtomicBool::new(false));
-        assert!(run_collector(running).is_ok());
+        let result = run_collector(running);
+        assert!(result.is_ok(), "{result:?}");
     }
-
 
     #[test]
     fn removable_drive_changes_are_labeled_without_claiming_file_transfer() {
         let previous = HashSet::from(["E:\\".to_owned()]);
         let current = HashSet::from(["F:\\".to_owned()]);
-        assert_eq!(drive_changes(&previous, &current), vec![
-            ("USB_DISCONNECTED", "E:\\".to_owned()),
-            ("USB_CONNECTED", "F:\\".to_owned()),
-        ]);
+        assert_eq!(
+            drive_changes(&previous, &current),
+            vec![
+                ("USB_DISCONNECTED", "E:\\".to_owned()),
+                ("USB_CONNECTED", "F:\\".to_owned()),
+            ]
+        );
     }
 }
