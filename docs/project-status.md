@@ -430,3 +430,15 @@
 - 관리자 보안 이벤트 필터와 표시명을 새 이벤트 의미에 맞게 갱신
 - 기존 장치에서 USB 파일 감사를 유지하도록 EF 마이그레이션 `SplitUsbFileAuditPolicy` 기본값을 ON으로 설정
 - 검증: 백엔드 52개, 관리자 15개, Tauri JavaScript 16개, Rust 39개 테스트 및 관리자 프로덕션 빌드 통과
+
+## 2026-08-31 공개형 Windows 사용자 에이전트 상태
+
+- 화면 캡처가 Windows Session 0 서비스에서 동작하지 않는 제약을 반영해 로그인 사용자 세션 자동시작 에이전트 구조 유지
+- 트레이에 `에이전트 실행 중`, `출퇴근 관리 열기`, `프로그램 종료`를 명시해 설치·실행 상태와 종료 경로를 사용자에게 공개
+- 60초 heartbeat에 에이전트 버전, 실행 방식 `UserSession`, 모니터링 Running/Stopped, 암호화 전송 대기 건수를 보고
+- 관리자 장치 화면에서 버전·실행 상태·실행 방식·전송 대기 건수를 확인
+- 에이전트 모니터 시작·중지를 `AGENT_STARTED`, `AGENT_STOPPED` 보안 이벤트로 기록
+- 다른 직원이 기존 DeviceId로 heartbeat를 보내 장치 소유자를 바꾸지 못하도록 서버 소유권 검증 추가
+- heartbeat는 직원 역할만 호출할 수 있도록 제한
+- EF 마이그레이션 `AddAgentHealthStatus` 추가
+- 검증: 백엔드 56개, 관리자 15개, Tauri JavaScript 17개, Rust 39개 테스트 및 관리자 프로덕션 빌드 통과

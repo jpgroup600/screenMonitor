@@ -1,4 +1,6 @@
 export const SECURITY_EVENT_LABELS = {
+  AGENT_STARTED: '에이전트 시작',
+  AGENT_STOPPED: '에이전트 중지',
   USB_CONNECTED: 'USB 연결',
   USB_DISCONNECTED: 'USB 해제',
   USB_FILE_WRITTEN: 'USB 파일 생성·변경',

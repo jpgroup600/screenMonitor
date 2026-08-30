@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { getOrCreateDeviceId, restoreAuthorizedMonitoring } from "./deviceHeartbeat";
+import { getOrCreateDeviceId, restoreAuthorizedMonitoring, sendDeviceHeartbeat } from "./deviceHeartbeat";
 
 describe("getOrCreateDeviceId", () => {
   it("persists one stable id for future heartbeats", () => {
@@ -8,6 +8,17 @@ describe("getOrCreateDeviceId", () => {
     expect(getOrCreateDeviceId(storage, () => "device-1")).toBe("device-1");
     expect(getOrCreateDeviceId(storage, () => "device-2")).toBe("device-1");
     expect(storage.setItem).toHaveBeenCalledTimes(1);
+  });
+});
+
+it("heartbeats publish visible agent mode, runtime state, and queue health", async () => {
+  const request = { post: vi.fn().mockResolvedValue({}) };
+  const storage = { getItem: vi.fn(() => "device-1"), setItem: vi.fn() };
+  const native = { agentStatus: vi.fn().mockResolvedValue({ agentVersion: "2.0.0", agentMode: "UserSession", monitoringState: "Running", pendingQueueItems: 3 }) };
+  await sendDeviceHeartbeat({ request, storage, native, platform: () => ({ name: "Windows", operatingSystem: "Windows 11" }) });
+  expect(request.post).toHaveBeenCalledWith("/devices/heartbeat", {
+    deviceId: "device-1", name: "Windows", operatingSystem: "Windows 11", agentVersion: "2.0.0",
+    agentMode: "UserSession", monitoringState: "Running", pendingQueueItems: 3,
   });
 });
 

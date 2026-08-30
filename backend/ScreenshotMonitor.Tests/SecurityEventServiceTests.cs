@@ -23,6 +23,8 @@ public class SecurityEventServiceTests
     [InlineData("FILE_MODIFIED")]
     [InlineData("USB_FILE_WRITTEN")]
     [InlineData("NETWORK_CONNECTION")]
+    [InlineData("AGENT_STARTED")]
+    [InlineData("AGENT_STOPPED")]
     public async Task Records_file_lifecycle_events(string eventType)
     {
         await using var db = CreateDb(); await SeedDevice(db);

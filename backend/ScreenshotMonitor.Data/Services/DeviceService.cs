@@ -10,9 +10,11 @@ namespace ScreenshotMonitor.Data.Services;
 
 public class DeviceService(SmDbContext dbContext, TimeProvider timeProvider)
 {
-    public async Task<Device> HeartbeatAsync(string employeeId, string deviceId, string name, string operatingSystem)
+    public async Task<Device> HeartbeatAsync(string employeeId, string deviceId, string name, string operatingSystem,
+        string? agentVersion = null, string? agentMode = null, string? monitoringState = null, int pendingQueueItems = 0)
     {
         if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentException("DeviceId is required.");
+        if (pendingQueueItems < 0) throw new ArgumentException("Pending queue count cannot be negative.");
         var now = timeProvider.GetUtcNow().UtcDateTime;
         var device = await dbContext.Devices.FindAsync(deviceId);
         if (device is null)
@@ -22,15 +24,22 @@ public class DeviceService(SmDbContext dbContext, TimeProvider timeProvider)
         }
         else
         {
+            if (device.EmployeeId != employeeId) throw new UnauthorizedAccessException("Device belongs to another employee.");
             if (device.Status == "Blocked") throw new UnauthorizedAccessException("Device is blocked.");
-            device.EmployeeId = employeeId;
             device.Name = name;
             device.OperatingSystem = operatingSystem;
             device.LastSeenAt = now;
         }
+        device.AgentVersion = Limit(agentVersion, 50);
+        device.AgentMode = Limit(agentMode, 30, "UserSession");
+        device.MonitoringState = Limit(monitoringState, 30, "Unknown");
+        device.PendingQueueItems = Math.Min(pendingQueueItems, 1_000_000);
         await dbContext.SaveChangesAsync();
         return device;
     }
+
+    private static string Limit(string? value, int maxLength, string fallback = "") =>
+        string.IsNullOrWhiteSpace(value) ? fallback : string.Concat(value.Trim().Take(maxLength));
 
     public Task<List<Device>> ListAsync() => dbContext.Devices.AsNoTracking().Include(x => x.Employee).OrderByDescending(x => x.LastSeenAt).ToListAsync();
 

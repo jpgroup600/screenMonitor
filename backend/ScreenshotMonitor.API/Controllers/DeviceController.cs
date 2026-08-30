@@ -11,10 +11,11 @@ public class DeviceController(DeviceService service) : ControllerBase
 {
     private string EmployeeId => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? throw new UnauthorizedAccessException();
 
-    [Authorize(Roles = "Employee,Admin"), HttpPost("heartbeat")]
+    [Authorize(Roles = "Employee"), HttpPost("heartbeat")]
     public async Task<ActionResult<DeviceResponseDto>> Heartbeat(DeviceHeartbeatRequestDto request)
     {
-        try { return Ok(ToResponse(await service.HeartbeatAsync(EmployeeId, request.DeviceId, request.Name, request.OperatingSystem))); }
+        try { return Ok(ToResponse(await service.HeartbeatAsync(EmployeeId, request.DeviceId, request.Name, request.OperatingSystem,
+            request.AgentVersion, request.AgentMode, request.MonitoringState, request.PendingQueueItems))); }
         catch (UnauthorizedAccessException) { return StatusCode(StatusCodes.Status403Forbidden, new { message = "Device is blocked." }); }
     }
 
@@ -28,5 +29,6 @@ public class DeviceController(DeviceService service) : ControllerBase
         catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
     }
 
-    private static DeviceResponseDto ToResponse(ScreenshotMonitor.Data.Entities.Device device) => new(device.Id, device.EmployeeId, device.Employee?.FullName ?? "", device.Name, device.OperatingSystem, device.RegisteredAt, device.LastSeenAt, device.Status);
+    private static DeviceResponseDto ToResponse(ScreenshotMonitor.Data.Entities.Device device) => new(device.Id, device.EmployeeId, device.Employee?.FullName ?? "", device.Name, device.OperatingSystem, device.RegisteredAt, device.LastSeenAt, device.Status,
+        device.AgentVersion, device.AgentMode, device.MonitoringState, device.PendingQueueItems);
 }

@@ -97,7 +97,7 @@ const Dashboard = () => {
   useEffect(() => {
     const heartbeat = async () => {
       try {
-        await sendDeviceHeartbeat({ request, storage: localStorage });
+        await sendDeviceHeartbeat({ request, storage: localStorage, native });
       } catch (error) {
         console.error("Device heartbeat failed:", error);
         if (error?.response?.status === 403) {
@@ -128,7 +128,7 @@ const Dashboard = () => {
     const loadAttendance = async () => {
       try {
         const current = await restoreAuthorizedMonitoring({
-          heartbeat: () => sendDeviceHeartbeat({ request, storage: localStorage }),
+          heartbeat: () => sendDeviceHeartbeat({ request, storage: localStorage, native }),
           restore: async () => {
             const policy = await loadDeviceSecurityPolicy({ request, storage: localStorage });
             setSecurityPolicy(policy);

@@ -11,7 +11,7 @@ namespace ScreenshotMonitor.Data.Services;
 
 public class SecurityEventService(SmDbContext dbContext, TimeProvider timeProvider)
 {
-    private static readonly HashSet<string> AllowedTypes = new(StringComparer.OrdinalIgnoreCase) { "USB_CONNECTED", "USB_DISCONNECTED", "USB_FILE_WRITTEN", "FILE_COPY", "FILE_CREATED", "FILE_MODIFIED", "FILE_DELETED", "FILE_MOVED", "NETWORK_CONNECTION", "NETWORK_TRANSFER" };
+    private static readonly HashSet<string> AllowedTypes = new(StringComparer.OrdinalIgnoreCase) { "AGENT_STARTED", "AGENT_STOPPED", "USB_CONNECTED", "USB_DISCONNECTED", "USB_FILE_WRITTEN", "FILE_COPY", "FILE_CREATED", "FILE_MODIFIED", "FILE_DELETED", "FILE_MOVED", "NETWORK_CONNECTION", "NETWORK_TRANSFER" };
 
     public async Task<SecurityEvent> RecordAsync(string employeeId, string deviceId, string eventType, string source, string details)
     {

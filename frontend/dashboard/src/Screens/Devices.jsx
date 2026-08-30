@@ -84,12 +84,13 @@ export default function Devices() {
           {!error && !loading && rows.length === 0 && <div className="p-12 text-center text-slate-500">등록된 장치가 없습니다.</div>}
           {!error && !loading && rows.length > 0 && (
             <div className="overflow-x-auto"><table className="min-w-full text-left text-sm">
-              <thead className="bg-slate-950/80 text-xs uppercase text-slate-500"><tr><th className="px-5 py-4">직원 / 장치</th><th className="px-5 py-4">연결</th><th className="px-5 py-4">운영체제</th><th className="px-5 py-4">마지막 접속</th><th className="px-5 py-4">관리</th></tr></thead>
+              <thead className="bg-slate-950/80 text-xs uppercase text-slate-500"><tr><th className="px-5 py-4">직원 / 장치</th><th className="px-5 py-4">연결</th><th className="px-5 py-4">에이전트</th><th className="px-5 py-4">운영체제</th><th className="px-5 py-4">마지막 접속</th><th className="px-5 py-4">관리</th></tr></thead>
               <tbody className="divide-y divide-slate-800">{rows.map((device) => {
                 const online = isDeviceOnline(device.lastSeenAt) && device.status !== 'Blocked';
                 return <tr key={device.id} className="hover:bg-slate-800/50">
                   <td className="px-5 py-4"><p className="font-medium">{device.employeeName || device.employeeId}</p><p className="text-xs text-slate-400">{device.name}</p><p className="font-mono text-xs text-slate-600">{device.id}</p></td>
                   <td className="px-5 py-4"><span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${online ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-700 text-slate-300'}`}>{online ? <FiWifi /> : <FiWifiOff />}{online ? '온라인' : '오프라인'}</span></td>
+                  <td className="px-5 py-4"><p className={device.monitoringState === 'Running' ? 'text-emerald-400' : 'text-amber-300'}>{device.monitoringState || 'Unknown'}</p><p className="text-xs text-slate-500">v{device.agentVersion || '?'} · {device.agentMode || 'UserSession'}</p>{device.pendingQueueItems > 0 && <p className="text-xs text-amber-400">전송 대기 {device.pendingQueueItems}건</p>}</td>
                   <td className="max-w-sm truncate px-5 py-4 text-slate-400" title={device.operatingSystem}>{device.operatingSystem}</td>
                   <td className="whitespace-nowrap px-5 py-4">{new Date(device.lastSeenAt).toLocaleString()}</td>
                   <td className="whitespace-nowrap px-5 py-4"><button onClick={() => setPolicyDevice(device)} className="mr-2 rounded-lg bg-blue-600 px-4 py-2 font-medium hover:bg-blue-700">정책 설정</button><button disabled={updating === device.id} onClick={() => changeStatus(device)} className={`rounded-lg px-4 py-2 font-medium disabled:opacity-50 ${device.status === 'Blocked' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}`}>{device.status === 'Blocked' ? '차단 해제' : '차단'}</button></td>

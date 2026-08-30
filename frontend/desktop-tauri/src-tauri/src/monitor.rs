@@ -50,6 +50,17 @@ pub fn spawn(
     let task_running = running.clone();
     tauri::async_runtime::spawn(async move {
         let api = ApiClient::new(base_url, token);
+        let lifecycle_details =
+            serde_json::json!({"agentVersion":env!("CARGO_PKG_VERSION"),"agentMode":"UserSession"})
+                .to_string();
+        let _ = api
+            .security_event(
+                &device_id,
+                "AGENT_STARTED",
+                "desktop-agent",
+                &lifecycle_details,
+            )
+            .await;
         let tracker = Arc::new(Mutex::new(ActivityTracker::default()));
         let mut activity_tick = tokio::time::interval(Duration::from_secs(1));
         let mut screenshot_tick = tokio::time::interval(
@@ -131,6 +142,14 @@ pub fn spawn(
             )
             .await;
         }
+        let _ = api
+            .security_event(
+                &device_id,
+                "AGENT_STOPPED",
+                "desktop-agent",
+                &lifecycle_details,
+            )
+            .await;
     });
     MonitorSession { running }
 }

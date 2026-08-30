@@ -14,4 +14,8 @@ public class Device
     public DateTime RegisteredAt { get; set; }
     public DateTime LastSeenAt { get; set; }
     [MaxLength(20)] public string Status { get; set; } = "Active";
+    [Required, MaxLength(50)] public string AgentVersion { get; set; } = string.Empty;
+    [Required, MaxLength(30)] public string AgentMode { get; set; } = "UserSession";
+    [Required, MaxLength(30)] public string MonitoringState { get; set; } = "Unknown";
+    public int PendingQueueItems { get; set; }
 }

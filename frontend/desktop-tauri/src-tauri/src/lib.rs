@@ -76,6 +76,35 @@ struct ReminderSession {
     running: Arc<AtomicBool>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentStatus {
+    agent_version: &'static str,
+    agent_mode: &'static str,
+    monitoring_state: &'static str,
+    pending_queue_items: usize,
+}
+
+#[tauri::command]
+fn agent_status(state: State<'_, AppState>) -> Result<AgentStatus, String> {
+    let monitoring_state = if state
+        .session
+        .lock()
+        .map_err(|error| error.to_string())?
+        .is_some()
+    {
+        "Running"
+    } else {
+        "Stopped"
+    };
+    Ok(AgentStatus {
+        agent_version: env!("CARGO_PKG_VERSION"),
+        agent_mode: "UserSession",
+        monitoring_state,
+        pending_queue_items: state.queue.pending()?.len(),
+    })
+}
+
 impl ReminderSession {
     fn stop(&self) {
         self.running.store(false, Ordering::SeqCst);
@@ -654,7 +683,8 @@ pub fn run() {
             process_inventory_backup,
             capture_screenshot,
             start_attendance_reminders,
-            stop_attendance_reminders
+            stop_attendance_reminders,
+            agent_status
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -675,10 +705,13 @@ pub fn run() {
                     window.hide()?;
                 }
             }
-            let show = MenuItem::with_id(app, "show", "Restore", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&show])?;
+            let status = MenuItem::with_id(app, "status", "에이전트 실행 중", false, None::<&str>)?;
+            let show = MenuItem::with_id(app, "show", "출퇴근 관리 열기", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "프로그램 종료", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&status, &show, &quit])?;
             TrayIconBuilder::new()
                 .menu(&menu)
+                .tooltip("출퇴근 관리 프로그램 · 에이전트 실행 중")
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
@@ -686,6 +719,7 @@ pub fn run() {
                             let _ = window.set_focus();
                         }
                     }
+                    "quit" => app.exit(0),
                     _ => {}
                 })
                 .build(app)?;

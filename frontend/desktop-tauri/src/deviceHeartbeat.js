@@ -8,13 +8,26 @@ export function getOrCreateDeviceId(storage, createId) {
   return created;
 }
 
-export async function sendDeviceHeartbeat({ request, storage, createId = () => crypto.randomUUID() }) {
+export async function sendDeviceHeartbeat({ request, storage, native, createId = () => crypto.randomUUID(), platform = defaultPlatform }) {
   const deviceId = getOrCreateDeviceId(storage, createId);
+  const agent = await native?.agentStatus?.().catch(() => null);
+  const environment = platform();
   return request.post("/devices/heartbeat", {
     deviceId,
+    name: environment.name,
+    operatingSystem: environment.operatingSystem,
+    agentVersion: agent?.agentVersion || "unknown",
+    agentMode: agent?.agentMode || "UserSession",
+    monitoringState: agent?.monitoringState || "Starting",
+    pendingQueueItems: agent?.pendingQueueItems || 0,
+  });
+}
+
+function defaultPlatform() {
+  return {
     name: navigator.userAgentData?.platform || navigator.platform || "Windows PC",
     operatingSystem: navigator.userAgent,
-  });
+  };
 }
 
 export async function restoreAuthorizedMonitoring({ heartbeat, restore }) {
