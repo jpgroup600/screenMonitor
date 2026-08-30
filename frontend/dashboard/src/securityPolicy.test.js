@@ -5,7 +5,7 @@ import { securityPolicyModules, securityPolicyPayload, updateSecurityPolicy } fr
 test('every independently controlled security module is represented', () => {
   assert.deepEqual(securityPolicyModules.map(([key]) => key), [
     'monitoringEnabled', 'screenshotsEnabled', 'activeAppTrackingEnabled', 'idleTrackingEnabled',
-    'backupEnabled', 'usbAuditEnabled', 'networkAuditEnabled', 'fileChangeAuditEnabled',
+    'backupEnabled', 'usbAuditEnabled', 'usbFileCopyAuditEnabled', 'networkAuditEnabled', 'fileChangeAuditEnabled',
     'attendanceRemindersEnabled', 'restoreEnabled', 'retentionEnabled',
   ]);
 });
@@ -23,7 +23,7 @@ test('API payload contains module switches and bounded retention settings', () =
     deviceId: 'device-1', updatedByAdminId: 'admin-1',
     retentionDays: 30, maxBackupBytes: 5 * 1024 ** 3, maxVersionsPerFile: 12,
   });
-  assert.equal(Object.keys(payload).length, 14);
+  assert.equal(Object.keys(payload).length, 15);
   assert.equal(payload.deviceId, undefined);
   assert.equal(payload.retentionDays, 30);
   assert.equal(payload.maxBackupBytes, 5 * 1024 ** 3);

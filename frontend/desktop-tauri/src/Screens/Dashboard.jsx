@@ -22,7 +22,7 @@ const Dashboard = () => {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!securityPolicy?.usbAuditEnabled) return undefined;
+    if (!securityPolicy?.usbFileCopyAuditEnabled) return undefined;
     const snapshots = new Map();
     const scanUsbFiles = async () => {
       try {
@@ -41,7 +41,7 @@ const Dashboard = () => {
     scanUsbFiles();
     const timer = window.setInterval(scanUsbFiles, 30_000);
     return () => window.clearInterval(timer);
-  }, [securityPolicy?.usbAuditEnabled]);
+  }, [securityPolicy?.usbFileCopyAuditEnabled]);
 
   useEffect(() => {
     if (!securityPolicy?.backupEnabled) return undefined;

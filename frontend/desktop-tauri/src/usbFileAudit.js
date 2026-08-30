@@ -10,9 +10,9 @@ export async function recordUsbFileCopies({ request, deviceId, drive, files, lim
   for (const file of files.slice(0, limit)) {
     await request.post("/security-events", {
       deviceId,
-      eventType: "FILE_COPY",
+      eventType: "USB_FILE_WRITTEN",
       source: file.path,
-      details: JSON.stringify({ destinationDrive: drive, sizeBytes: file.sizeBytes ?? file.size_bytes ?? 0 }),
+      details: JSON.stringify({ destinationDrive: drive, sizeBytes: file.sizeBytes ?? file.size_bytes ?? 0, evidence: "new_or_changed_file_on_removable_drive", confirmedCopy: false }),
     });
   }
 }

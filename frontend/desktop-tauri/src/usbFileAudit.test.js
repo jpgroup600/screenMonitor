@@ -11,11 +11,11 @@ describe("USB file audit", () => {
     ]).map((file) => file.path)).toEqual(["E:\\old.txt", "E:\\new.txt"]);
   });
 
-  it("records copied file path and size as a security event", async () => {
+  it("records removable-drive writes without falsely claiming a confirmed copy", async () => {
     const request = { post: vi.fn().mockResolvedValue({}) };
     await recordUsbFileCopies({ request, deviceId: "device-1", drive: "E:\\", files: [{ path: "E:\\secret.pdf", size_bytes: 42 }] });
     expect(request.post).toHaveBeenCalledWith("/security-events", expect.objectContaining({
-      deviceId: "device-1", eventType: "FILE_COPY", source: "E:\\secret.pdf",
+      deviceId: "device-1", eventType: "USB_FILE_WRITTEN", source: "E:\\secret.pdf",
     }));
   });
 });

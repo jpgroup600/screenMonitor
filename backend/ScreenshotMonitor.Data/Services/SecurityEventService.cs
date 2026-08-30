@@ -11,7 +11,7 @@ namespace ScreenshotMonitor.Data.Services;
 
 public class SecurityEventService(SmDbContext dbContext, TimeProvider timeProvider)
 {
-    private static readonly HashSet<string> AllowedTypes = new(StringComparer.OrdinalIgnoreCase) { "USB_CONNECTED", "USB_DISCONNECTED", "FILE_COPY", "FILE_CREATED", "FILE_MODIFIED", "FILE_DELETED", "FILE_MOVED", "NETWORK_TRANSFER" };
+    private static readonly HashSet<string> AllowedTypes = new(StringComparer.OrdinalIgnoreCase) { "USB_CONNECTED", "USB_DISCONNECTED", "USB_FILE_WRITTEN", "FILE_COPY", "FILE_CREATED", "FILE_MODIFIED", "FILE_DELETED", "FILE_MOVED", "NETWORK_CONNECTION", "NETWORK_TRANSFER" };
 
     public async Task<SecurityEvent> RecordAsync(string employeeId, string deviceId, string eventType, string source, string details)
     {
@@ -29,6 +29,7 @@ public class SecurityEventService(SmDbContext dbContext, TimeProvider timeProvid
             EmployeeId = employeeId, DeviceId = deviceId, EventType = eventType.ToUpperInvariant(),
             Source = source ?? string.Empty, Details = normalizedDetails,
             Severity = eventType.Equals("USB_CONNECTED", StringComparison.OrdinalIgnoreCase)
+                || eventType.Equals("USB_FILE_WRITTEN", StringComparison.OrdinalIgnoreCase)
                 || eventType.Equals("NETWORK_TRANSFER", StringComparison.OrdinalIgnoreCase) ? "Warning" : "Info",
             OccurredAt = timeProvider.GetUtcNow().UtcDateTime
         };

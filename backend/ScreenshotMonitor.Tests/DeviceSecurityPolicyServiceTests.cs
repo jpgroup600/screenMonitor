@@ -69,14 +69,14 @@ public class DeviceSecurityPolicyServiceTests
         await using var db = CreateDb(); await SeedAsync(db);
         var service = CreateService(db, TimeProvider.System);
         var invalid = new UpdateDeviceSecurityPolicyDto(true, true, true, true, true, true, true, true, true, true,
-            true, 0, 50L * 1024 * 1024 * 1024, 20);
+            true, true, 0, 50L * 1024 * 1024 * 1024, 20);
         await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync("admin-1", "device-1", invalid));
         Assert.Empty(db.DeviceSecurityPolicies);
         Assert.Empty(db.AdminAuditLogs);
     }
 
     private static UpdateDeviceSecurityPolicyDto Update(bool monitoring = true, bool screenshots = true, bool backup = true, bool usb = true, bool network = true) =>
-        new(monitoring, screenshots, true, true, backup, usb, network, true, true, true, false, 90, 50L * 1024 * 1024 * 1024, 20);
+        new(monitoring, screenshots, true, true, backup, usb, true, network, true, true, true, false, 90, 50L * 1024 * 1024 * 1024, 20);
 
     private static async Task SeedAsync(SmDbContext db)
     {

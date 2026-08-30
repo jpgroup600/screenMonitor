@@ -5,6 +5,7 @@ export const defaultDeviceSecurityPolicy = Object.freeze({
   idleTrackingEnabled: true,
   backupEnabled: true,
   usbAuditEnabled: true,
+  usbFileCopyAuditEnabled: true,
   networkAuditEnabled: true,
   fileChangeAuditEnabled: true,
   attendanceRemindersEnabled: true,

@@ -101,7 +101,7 @@ pub fn spawn(
                             for connection in crate::network_audit::detect_new(previous, &current).into_iter().take(100) {
                                 let source = format!("{}:{}", connection.remote_address, connection.remote_port);
                                 let details = serde_json::json!({"processId":connection.process_id,"evidence":"new_external_tcp_connection","confirmedFileTransfer":false}).to_string();
-                                let _ = api.security_event(&device_id, "NETWORK_TRANSFER", &source, &details).await;
+                                let _ = api.security_event(&device_id, "NETWORK_CONNECTION", &source, &details).await;
                             }
                         }
                         network_baseline = Some(current);

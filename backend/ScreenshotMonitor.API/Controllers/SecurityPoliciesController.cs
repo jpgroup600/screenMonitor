@@ -46,7 +46,7 @@ public class SecurityPoliciesController(DeviceSecurityPolicyService service) : C
 
     private static DeviceSecurityPolicyDto ToDto(DeviceSecurityPolicy value) => new(
         value.DeviceId, value.MonitoringEnabled, value.ScreenshotsEnabled, value.ActiveAppTrackingEnabled,
-        value.IdleTrackingEnabled, value.BackupEnabled, value.UsbAuditEnabled, value.NetworkAuditEnabled,
+        value.IdleTrackingEnabled, value.BackupEnabled, value.UsbAuditEnabled, value.UsbFileCopyAuditEnabled, value.NetworkAuditEnabled,
         value.FileChangeAuditEnabled, value.AttendanceRemindersEnabled, value.RestoreEnabled,
         value.RetentionEnabled, value.RetentionDays, value.MaxBackupBytes, value.MaxVersionsPerFile,
         value.UpdatedByAdminId, value.UpdatedAt);

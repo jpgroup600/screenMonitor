@@ -421,3 +421,12 @@
 - 자동 정리 결과와 객체 삭제 실패를 관리자 해시 체인 감사 로그에 기록
 - 기존 장치 정책에는 안전한 기본값 90일·50GB·파일별 20버전을 부여하는 EF 마이그레이션 `AddBackupRetentionPolicy` 추가
 - 검증: 백엔드 50개, 관리자 15개, Rust 39개 테스트와 관리자 프로덕션 빌드 통과, EF pending model 변경 없음 확인
+
+## 2026-08-31 USB·네트워크 감사 의미·정책 세분화
+
+- USB 연결·해제 감사와 USB 파일 생성·변경 감사를 서로 독립적인 관리자 ON/OFF 스위치로 분리
+- 이동식 드라이브의 새 파일·변경 파일은 복사가 확정됐다고 과장하지 않고 `USB_FILE_WRITTEN`으로 기록하며 근거와 `confirmedCopy: false` 저장
+- 일반 외부 TCP 연결은 `NETWORK_TRANSFER` 대신 `NETWORK_CONNECTION`으로 기록하여 실제 파일 반출 확정 이벤트와 구분
+- 관리자 보안 이벤트 필터와 표시명을 새 이벤트 의미에 맞게 갱신
+- 기존 장치에서 USB 파일 감사를 유지하도록 EF 마이그레이션 `SplitUsbFileAuditPolicy` 기본값을 ON으로 설정
+- 검증: 백엔드 52개, 관리자 15개, Tauri JavaScript 16개, Rust 39개 테스트 및 관리자 프로덕션 빌드 통과
