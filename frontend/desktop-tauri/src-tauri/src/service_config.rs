@@ -6,13 +6,14 @@ use std::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
+#[serde(default, rename_all = "camelCase")]
 pub struct ServiceConfig {
     pub backup_enabled: bool,
     pub file_change_audit_enabled: bool,
     pub network_audit_enabled: bool,
     pub usb_audit_enabled: bool,
     pub usb_file_copy_audit_enabled: bool,
+    pub usb_risk_detection_enabled: bool,
     pub roots: Vec<String>,
 }
 
@@ -71,6 +72,7 @@ mod tests {
             network_audit_enabled: true,
             usb_audit_enabled: true,
             usb_file_copy_audit_enabled: false,
+            usb_risk_detection_enabled: false,
             roots: vec![r"C:\".into()],
         };
         config.save(&path).unwrap();
@@ -80,5 +82,15 @@ mod tests {
         );
         assert_eq!(ServiceConfig::load(&path).unwrap(), config);
         assert!(!path.with_extension("pending").exists());
+    }
+
+    #[test]
+    fn older_machine_policy_remains_readable_when_a_module_is_added() {
+        let value: ServiceConfig = serde_json::from_str(
+            r#"{"backupEnabled":true,"fileChangeAuditEnabled":true,"networkAuditEnabled":true,"usbAuditEnabled":true,"usbFileCopyAuditEnabled":true,"roots":["C:\\"]}"#,
+        )
+        .unwrap();
+        assert!(value.backup_enabled);
+        assert!(!value.usb_risk_detection_enabled);
     }
 }

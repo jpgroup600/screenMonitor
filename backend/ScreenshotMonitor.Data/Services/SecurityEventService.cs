@@ -28,9 +28,7 @@ public class SecurityEventService(SmDbContext dbContext, TimeProvider timeProvid
         var entry = new SecurityEvent {
             EmployeeId = employeeId, DeviceId = deviceId, EventType = eventType.ToUpperInvariant(),
             Source = source ?? string.Empty, Details = normalizedDetails,
-            Severity = eventType.Equals("USB_CONNECTED", StringComparison.OrdinalIgnoreCase)
-                || eventType.Equals("USB_FILE_WRITTEN", StringComparison.OrdinalIgnoreCase)
-                || eventType.Equals("NETWORK_TRANSFER", StringComparison.OrdinalIgnoreCase) ? "Warning" : "Info",
+            Severity = DetermineSeverity(eventType, normalizedDetails),
             OccurredAt = timeProvider.GetUtcNow().UtcDateTime
         };
         dbContext.SecurityEvents.Add(entry); await dbContext.SaveChangesAsync(); return entry;
@@ -38,4 +36,21 @@ public class SecurityEventService(SmDbContext dbContext, TimeProvider timeProvid
 
     public Task<List<SecurityEvent>> ListAsync(int take = 200) => dbContext.SecurityEvents.AsNoTracking().Include(x => x.Employee)
         .OrderByDescending(x => x.OccurredAt).Take(Math.Clamp(take, 1, 500)).ToListAsync();
+
+    private static string DetermineSeverity(string eventType, string details)
+    {
+        if (eventType.Equals("USB_FILE_WRITTEN", StringComparison.OrdinalIgnoreCase))
+        {
+            using var document = JsonDocument.Parse(details);
+            if (document.RootElement.TryGetProperty("risk", out var risk)
+                && risk.ValueKind == JsonValueKind.Object
+                && risk.TryGetProperty("level", out var level)
+                && level.ValueKind == JsonValueKind.String
+                && level.GetString()?.Equals("High", StringComparison.OrdinalIgnoreCase) == true)
+                return "High";
+        }
+        return eventType.Equals("USB_CONNECTED", StringComparison.OrdinalIgnoreCase)
+            || eventType.Equals("USB_FILE_WRITTEN", StringComparison.OrdinalIgnoreCase)
+            || eventType.Equals("NETWORK_TRANSFER", StringComparison.OrdinalIgnoreCase) ? "Warning" : "Info";
+    }
 }

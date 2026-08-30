@@ -53,7 +53,11 @@ pub fn sha256_file(path: &Path) -> Result<String, String> {
     Ok(format!("{:x}", hash.finalize()))
 }
 
-pub fn file_write_details(path: &Path, destination: Option<&Path>) -> String {
+pub fn file_write_details(
+    path: &Path,
+    destination: Option<&Path>,
+    risk: Option<&crate::usb_risk::UsbRiskAssessment>,
+) -> String {
     let metadata = path.metadata().ok();
     let drive_root = drive_root_from_path(path);
     serde_json::json!({
@@ -61,6 +65,7 @@ pub fn file_write_details(path: &Path, destination: Option<&Path>) -> String {
         "destinationDrive": drive_root,
         "sizeBytes": metadata.as_ref().map(|value| value.len()),
         "sha256": sha256_file(path).ok(),
+        "risk": risk,
         "evidence": "windows_service_removable_filesystem_notification",
         "confirmedCopy": false
     })
@@ -157,7 +162,7 @@ mod tests {
         let source = directory.path().join("report.pdf");
         std::fs::write(&source, b"classified").unwrap();
         let value: serde_json::Value =
-            serde_json::from_str(&file_write_details(&source, None)).unwrap();
+            serde_json::from_str(&file_write_details(&source, None, None)).unwrap();
         assert_eq!(value["sizeBytes"], 10);
         assert_eq!(value["sha256"].as_str().unwrap().len(), 64);
         assert_eq!(value["confirmedCopy"], false);

@@ -41,6 +41,15 @@ public class SecurityEventServiceTests
         Assert.Equal("Warning", entry.Severity); Assert.Equal("USB_CONNECTED", entry.EventType); Assert.Single(db.SecurityEvents);
     }
     [Fact]
+    public async Task Usb_risk_evidence_is_promoted_to_high_severity()
+    {
+        await using var db = CreateDb(); await SeedDevice(db);
+        var service = new SecurityEventService(db, TimeProvider.System);
+        var entry = await service.RecordAsync("employee-1", "device-1", "USB_FILE_WRITTEN", @"E:\export.zip",
+            "{\"risk\":{\"level\":\"High\",\"reasons\":[\"archive_file\"]},\"confirmedCopy\":false}");
+        Assert.Equal("High", entry.Severity);
+    }
+    [Fact]
     public async Task Rejects_unknown_event_types()
     {
         await using var db = CreateDb(); var service = new SecurityEventService(db, TimeProvider.System);

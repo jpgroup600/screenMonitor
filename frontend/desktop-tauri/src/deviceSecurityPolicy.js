@@ -6,6 +6,7 @@ export const defaultDeviceSecurityPolicy = Object.freeze({
   backupEnabled: true,
   usbAuditEnabled: true,
   usbFileCopyAuditEnabled: true,
+  usbRiskDetectionEnabled: true,
   networkAuditEnabled: true,
   fileChangeAuditEnabled: true,
   attendanceRemindersEnabled: true,

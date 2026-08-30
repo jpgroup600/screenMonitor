@@ -16,6 +16,7 @@ public class DeviceSecurityPolicy
     public bool BackupEnabled { get; set; } = true;
     public bool UsbAuditEnabled { get; set; } = true;
     public bool UsbFileCopyAuditEnabled { get; set; } = true;
+    public bool UsbRiskDetectionEnabled { get; set; } = true;
     public bool NetworkAuditEnabled { get; set; } = true;
     public bool FileChangeAuditEnabled { get; set; } = true;
     public bool AttendanceRemindersEnabled { get; set; } = true;

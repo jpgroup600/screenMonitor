@@ -6,6 +6,7 @@ export const securityPolicyModules = [
   ['backupEnabled', '파일 백업', '고정 드라이브 목록 수집 및 암호화 백업'],
   ['usbAuditEnabled', 'USB 연결 감사', '이동식 드라이브 연결·해제 기록'],
   ['usbFileCopyAuditEnabled', 'USB 파일 쓰기 감사', '이동식 드라이브에 새로 생기거나 변경된 파일 기록'],
+  ['usbRiskDetectionEnabled', 'USB 반출 위험도 분석', '압축·민감·대용량 파일과 5분 내 대량 쓰기를 높은 위험도로 분류'],
   ['networkAuditEnabled', '외부 연결 감사', '새로운 외부 TCP 연결 기록(파일 전송 확정 아님)'],
   ['fileChangeAuditEnabled', '파일 변경 감사', '파일 생성·수정·이동·삭제 기록'],
   ['attendanceRemindersEnabled', '출근 알림', '미출근 상태에서 10분 간격 알림'],

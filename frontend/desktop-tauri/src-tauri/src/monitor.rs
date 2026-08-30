@@ -36,6 +36,8 @@ pub struct MonitoringPolicy {
     pub usb_audit_enabled: bool,
     #[serde(default)]
     pub usb_file_copy_audit_enabled: bool,
+    #[serde(default)]
+    pub usb_risk_detection_enabled: bool,
 }
 
 impl MonitorSession {
@@ -317,7 +319,8 @@ mod tests {
             "fileChangeAuditEnabled": true,
             "restoreEnabled": false,
             "usbAuditEnabled": true,
-            "usbFileCopyAuditEnabled": false
+            "usbFileCopyAuditEnabled": false,
+            "usbRiskDetectionEnabled": true
         }))
         .unwrap();
         assert!(!policy.screenshots_enabled);
@@ -329,6 +332,7 @@ mod tests {
         assert!(!policy.restore_enabled);
         assert!(policy.usb_audit_enabled);
         assert!(!policy.usb_file_copy_audit_enabled);
+        assert!(policy.usb_risk_detection_enabled);
     }
 
     #[tokio::test]

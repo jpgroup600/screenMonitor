@@ -48,6 +48,7 @@ async fn collect(
     let mut removable_baseline = HashSet::new();
     let mut network_baseline = None;
     let usb_evidence_pending = Arc::new(Mutex::new(HashSet::new()));
+    let usb_risk_tracker = Arc::new(Mutex::new(crate::usb_risk::UsbRiskTracker::default()));
     let mut config_tick = tokio::time::interval(Duration::from_secs(5));
     let mut removable_tick = tokio::time::interval(Duration::from_secs(2));
     let mut network_tick = tokio::time::interval(Duration::from_secs(15));
@@ -103,6 +104,8 @@ async fn collect(
                         if !accepted { continue; }
                         let event_spool = spool.clone();
                         let pending = usb_evidence_pending.clone();
+                        let risk_tracker = usb_risk_tracker.clone();
+                        let risk_enabled = active_config.usb_risk_detection_enabled;
                         tokio::spawn(async move {
                             for _ in 0..6 {
                                 tokio::time::sleep(Duration::from_secs(10)).await;
@@ -110,7 +113,14 @@ async fn collect(
                                     let evidence_source = source.clone();
                                     let evidence_destination = destination.clone();
                                     let details = tokio::task::spawn_blocking(move || {
-                                        crate::usb_evidence::file_write_details(&evidence_source, evidence_destination.as_deref())
+                                        let risk = if risk_enabled {
+                                            let size = evidence_source.metadata().map(|value| value.len()).unwrap_or(0);
+                                            let now = std::time::SystemTime::now()
+                                                .duration_since(std::time::UNIX_EPOCH)
+                                                .unwrap_or_default();
+                                            risk_tracker.lock().ok().map(|mut tracker| tracker.assess(&evidence_source, size, now))
+                                        } else { None };
+                                        crate::usb_evidence::file_write_details(&evidence_source, evidence_destination.as_deref(), risk.as_ref())
                                     }).await.unwrap_or_else(|_| serde_json::json!({
                                         "evidence": "windows_service_removable_filesystem_notification",
                                         "confirmedCopy": false,
@@ -252,6 +262,7 @@ mod tests {
             network_audit_enabled: false,
             usb_audit_enabled: false,
             usb_file_copy_audit_enabled: false,
+            usb_risk_detection_enabled: false,
             roots: vec![watched.to_string_lossy().into_owned()],
         }
         .save(&data.join("agent-policy.dat"))

@@ -64,6 +64,7 @@ public class DeviceSecurityPolicyService(SmDbContext db, TimeProvider timeProvid
         policy.BackupEnabled = value.BackupEnabled;
         policy.UsbAuditEnabled = value.UsbAuditEnabled;
         policy.UsbFileCopyAuditEnabled = value.UsbFileCopyAuditEnabled;
+        policy.UsbRiskDetectionEnabled = value.UsbRiskDetectionEnabled ?? true;
         policy.NetworkAuditEnabled = value.NetworkAuditEnabled;
         policy.FileChangeAuditEnabled = value.FileChangeAuditEnabled;
         policy.AttendanceRemindersEnabled = value.AttendanceRemindersEnabled;
@@ -94,7 +95,7 @@ public class DeviceSecurityPolicyService(SmDbContext db, TimeProvider timeProvid
 
     internal static string Snapshot(DeviceSecurityPolicy value) => JsonSerializer.Serialize(new {
         value.MonitoringEnabled, value.ScreenshotsEnabled, value.ActiveAppTrackingEnabled, value.IdleTrackingEnabled,
-        value.BackupEnabled, value.UsbAuditEnabled, value.UsbFileCopyAuditEnabled, value.NetworkAuditEnabled, value.FileChangeAuditEnabled,
+        value.BackupEnabled, value.UsbAuditEnabled, value.UsbFileCopyAuditEnabled, value.UsbRiskDetectionEnabled, value.NetworkAuditEnabled, value.FileChangeAuditEnabled,
         value.AttendanceRemindersEnabled, value.RestoreEnabled, value.RetentionEnabled,
         value.RetentionDays, value.MaxBackupBytes, value.MaxVersionsPerFile,
         value.ResourceThrottlingEnabled, value.PauseBackupOnBattery, value.PauseBackupOnMeteredNetwork,

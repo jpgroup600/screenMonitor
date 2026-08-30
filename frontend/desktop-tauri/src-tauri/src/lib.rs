@@ -19,6 +19,7 @@ mod service_config;
 mod service_spool;
 mod upload_budget;
 mod usb_evidence;
+mod usb_risk;
 
 use monitor::MonitorSession;
 use offline_queue::OfflineQueue;
@@ -111,6 +112,7 @@ impl AppState {
             network_audit_enabled: policy.network_audit_enabled,
             usb_audit_enabled: policy.usb_audit_enabled,
             usb_file_copy_audit_enabled: policy.usb_file_copy_audit_enabled,
+            usb_risk_detection_enabled: policy.usb_risk_detection_enabled,
             roots: platform::fixed_drives(),
         }
         .save(&self.service_config_path)

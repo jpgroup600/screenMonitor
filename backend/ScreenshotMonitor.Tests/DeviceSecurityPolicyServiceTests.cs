@@ -14,7 +14,7 @@ public class DeviceSecurityPolicyServiceTests
     {
         await using var db = CreateDb(); await SeedAsync(db);
         var policy = await CreateService(db, TimeProvider.System).GetForEmployeeAsync("employee-1", "device-1");
-        Assert.True(policy.MonitoringEnabled); Assert.True(policy.BackupEnabled); Assert.True(policy.UsbAuditEnabled);
+        Assert.True(policy.MonitoringEnabled); Assert.True(policy.BackupEnabled); Assert.True(policy.UsbAuditEnabled); Assert.True(policy.UsbRiskDetectionEnabled);
         Assert.Empty(db.DeviceSecurityPolicies);
     }
 
@@ -70,14 +70,14 @@ public class DeviceSecurityPolicyServiceTests
         await using var db = CreateDb(); await SeedAsync(db);
         var service = CreateService(db, TimeProvider.System);
         var invalid = new UpdateDeviceSecurityPolicyDto(true, true, true, true, true, true, true, true, true, true,
-            true, true, 0, 50L * 1024 * 1024 * 1024, 20, true, true, true, 2, 10L * 1024 * 1024 * 1024);
+            true, true, true, 0, 50L * 1024 * 1024 * 1024, 20, true, true, true, 2, 10L * 1024 * 1024 * 1024);
         await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync("admin-1", "device-1", invalid));
         Assert.Empty(db.DeviceSecurityPolicies);
         Assert.Empty(db.AdminAuditLogs);
     }
 
     private static UpdateDeviceSecurityPolicyDto Update(bool monitoring = true, bool screenshots = true, bool backup = true, bool usb = true, bool network = true) =>
-        new(monitoring, screenshots, true, true, backup, usb, true, network, true, true, true, false, 90, 50L * 1024 * 1024 * 1024, 20,
+        new(monitoring, screenshots, true, true, backup, usb, true, true, network, true, true, true, false, 90, 50L * 1024 * 1024 * 1024, 20,
             true, true, true, 2, 10L * 1024 * 1024 * 1024);
 
     [Fact]
@@ -101,8 +101,9 @@ public class DeviceSecurityPolicyServiceTests
     {
         await using var db = CreateDb(); await SeedAsync(db);
         var policy = await CreateService(db, TimeProvider.System).UpdateAsync(
-            "admin-1", "device-1", Update() with { PauseBackupOnMeteredNetwork = null });
+            "admin-1", "device-1", Update() with { PauseBackupOnMeteredNetwork = null, UsbRiskDetectionEnabled = null });
         Assert.True(policy.PauseBackupOnMeteredNetwork);
+        Assert.True(policy.UsbRiskDetectionEnabled);
     }
 
     private static async Task SeedAsync(SmDbContext db)
