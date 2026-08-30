@@ -5,6 +5,7 @@ use crate::{
     platform,
 };
 use screenshots::Screen;
+use serde::Deserialize;
 use std::{
     path::PathBuf,
     sync::{
@@ -17,6 +18,16 @@ use tokio::sync::Mutex;
 
 pub struct MonitorSession {
     running: Arc<AtomicBool>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MonitoringPolicy {
+    pub screenshots_enabled: bool,
+    pub active_app_tracking_enabled: bool,
+    pub idle_tracking_enabled: bool,
+    pub network_audit_enabled: bool,
+    pub restore_enabled: bool,
 }
 
 impl MonitorSession {
@@ -32,6 +43,7 @@ pub fn spawn(
     queue: Arc<OfflineQueue>,
     device_id: String,
     restore_directory: PathBuf,
+    policy: MonitoringPolicy,
 ) -> MonitorSession {
     let running = Arc::new(AtomicBool::new(true));
     let task_running = running.clone();
@@ -53,27 +65,30 @@ pub fn spawn(
         while task_running.load(Ordering::SeqCst) {
             tokio::select! {
                 _ = activity_tick.tick() => {
-                    let app = if platform::idle_seconds() >= 15 { "idle".into() } else { platform::active_application() };
+                    if !policy.active_app_tracking_enabled && !policy.idle_tracking_enabled { continue; }
+                    let is_idle = policy.idle_tracking_enabled && platform::idle_seconds() >= 15;
+                    let app = if is_idle { "idle".into() } else if policy.active_app_tracking_enabled { platform::active_application() } else { "__active__".into() };
                     let transition = tracker.lock().await.transition(app);
                     if let Some(name) = transition.ended {
                         if name == "idle" { let _ = api.attendance_idle_event("end").await; }
-                        send_or_queue(&api, &queue, QueuedRequest::AppEvent { kind: "end".into(), app_name: name }).await;
+                        if policy.active_app_tracking_enabled && name != "__active__" { send_or_queue(&api, &queue, QueuedRequest::AppEvent { kind: "end".into(), app_name: name }).await; }
                     }
                     if let Some(name) = transition.started {
                         if name == "idle" { let _ = api.attendance_idle_event("start").await; }
-                        send_or_queue(&api, &queue, QueuedRequest::AppEvent { kind: "start".into(), app_name: name }).await;
+                        if policy.active_app_tracking_enabled && name != "__active__" { send_or_queue(&api, &queue, QueuedRequest::AppEvent { kind: "start".into(), app_name: name }).await; }
                     }
                 }
                 _ = screenshot_tick.tick() => {
-                    if screenshot_interval.is_some() { let _ = capture_and_upload(&api, &queue).await; }
+                    if policy.screenshots_enabled && screenshot_interval.is_some() { let _ = capture_and_upload(&api, &queue).await; }
                 }
                 _ = retry_tick.tick() => {
                     let _ = retry_pending(&api, &queue).await;
                 }
                 _ = restore_tick.tick() => {
-                    let _ = process_restore_requests(&api, &device_id, &restore_directory).await;
+                    if policy.restore_enabled { let _ = process_restore_requests(&api, &device_id, &restore_directory).await; }
                 }
                 _ = network_tick.tick() => {
+                    if !policy.network_audit_enabled { continue; }
                     if let Ok(current) = tauri::async_runtime::spawn_blocking(crate::network_audit::established_external_connections).await.unwrap_or_else(|error| Err(error.to_string())) {
                         if let Some(previous) = &network_baseline {
                             for connection in crate::network_audit::detect_new(previous, &current).into_iter().take(100) {
@@ -219,6 +234,22 @@ async fn retry_pending(api: &ApiClient, queue: &OfflineQueue) -> Result<(), Stri
 mod tests {
     use super::*;
     use httpmock::prelude::*;
+
+    #[test]
+    fn monitoring_policy_deserializes_independent_admin_switches() {
+        let policy: MonitoringPolicy = serde_json::from_value(serde_json::json!({
+            "screenshotsEnabled": false,
+            "activeAppTrackingEnabled": true,
+            "idleTrackingEnabled": false,
+            "networkAuditEnabled": true,
+            "restoreEnabled": false
+        })).unwrap();
+        assert!(!policy.screenshots_enabled);
+        assert!(policy.active_app_tracking_enabled);
+        assert!(!policy.idle_tracking_enabled);
+        assert!(policy.network_audit_enabled);
+        assert!(!policy.restore_enabled);
+    }
 
     #[tokio::test]
     async fn retry_removes_only_successfully_delivered_items() {

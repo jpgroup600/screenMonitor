@@ -108,6 +108,9 @@ namespace ScreenshotMonitor.Data.Context
             modelBuilder.Entity<BackupInventoryItem>().HasOne(x => x.Run).WithMany(x => x.Items).HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<BackupInventoryItem>().HasIndex(x => new { x.RunId, x.Path }).IsUnique();
             modelBuilder.Entity<BackupPathRule>().HasIndex(x => new { x.DeviceId, x.Path }).IsUnique();
+            modelBuilder.Entity<DeviceSecurityPolicy>().HasOne(x => x.Device).WithOne().HasForeignKey<DeviceSecurityPolicy>(x => x.DeviceId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DeviceSecurityPolicy>().HasIndex(x => x.DeviceId).IsUnique();
+            modelBuilder.Entity<AdminAuditLog>().HasIndex(x => x.OccurredAt);
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -150,5 +153,7 @@ namespace ScreenshotMonitor.Data.Context
         public DbSet<BackupInventoryRun> BackupInventoryRuns { get; set; }
         public DbSet<BackupInventoryItem> BackupInventoryItems { get; set; }
         public DbSet<BackupPathRule> BackupPathRules { get; set; }
+        public DbSet<DeviceSecurityPolicy> DeviceSecurityPolicies { get; set; }
+        public DbSet<AdminAuditLog> AdminAuditLogs { get; set; }
     }
 }

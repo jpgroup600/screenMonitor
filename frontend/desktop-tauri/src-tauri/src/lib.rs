@@ -86,6 +86,7 @@ fn start_monitoring(
     token: String,
     interval_ms: u64,
     device_id: String,
+    policy: monitor::MonitoringPolicy,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let mut session = state.session.lock().map_err(|e| e.to_string())?;
@@ -100,6 +101,7 @@ fn start_monitoring(
         state.queue.clone(),
         device_id,
         state.restore_directory.clone(),
+        policy,
     ));
     Ok(())
 }
@@ -108,6 +110,7 @@ fn start_monitoring(
 fn start_attendance_monitoring(
     token: String,
     device_id: String,
+    policy: monitor::MonitoringPolicy,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     let mut session = state.session.lock().map_err(|e| e.to_string())?;
@@ -122,6 +125,7 @@ fn start_attendance_monitoring(
         state.queue.clone(),
         device_id,
         state.restore_directory.clone(),
+        policy,
     ));
     Ok(())
 }

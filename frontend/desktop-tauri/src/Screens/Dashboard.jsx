@@ -9,6 +9,7 @@ import { restoreAuthorizedMonitoring, sendDeviceHeartbeat } from "../deviceHeart
 import { diffRemovableDrives, recordUsbChanges } from "../usbAudit";
 import { diffUsbFiles, recordUsbFileCopies } from "../usbFileAudit";
 import { BACKUP_INITIAL_DELAY_MS, BACKUP_INTERVAL_MS, runBackupCycle, runBackupQueueCycle } from "../backupScheduler";
+import { loadDeviceSecurityPolicy, sameDeviceSecurityPolicy } from "../deviceSecurityPolicy";
 
 const Dashboard = () => {
   const [attendance, setAttendance] = useState(null);
@@ -17,9 +18,11 @@ const Dashboard = () => {
   const [projectsLoading, setProjectsLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [securityPolicy, setSecurityPolicy] = useState(null);
   const navigate = useNavigate();
 
   useEffect(() => {
+    if (!securityPolicy?.usbAuditEnabled) return undefined;
     const snapshots = new Map();
     const scanUsbFiles = async () => {
       try {
@@ -38,23 +41,26 @@ const Dashboard = () => {
     scanUsbFiles();
     const timer = window.setInterval(scanUsbFiles, 30_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [securityPolicy?.usbAuditEnabled]);
 
   useEffect(() => {
+    if (!securityPolicy?.backupEnabled) return undefined;
     const processQueue = () => runBackupQueueCycle({ native, storage: localStorage }).catch((error) => console.error("Backup queue failed:", error));
     const initial = window.setTimeout(processQueue, 10_000);
     const timer = window.setInterval(processQueue, 60_000);
     return () => { window.clearTimeout(initial); window.clearInterval(timer); };
-  }, []);
+  }, [securityPolicy?.backupEnabled]);
 
   useEffect(() => {
+    if (!securityPolicy?.backupEnabled) return undefined;
     const backup = () => runBackupCycle({ native, storage: localStorage }).catch((error) => console.error("Incremental backup failed:", error));
     const initial = window.setTimeout(backup, BACKUP_INITIAL_DELAY_MS);
     const timer = window.setInterval(backup, BACKUP_INTERVAL_MS);
     return () => { window.clearTimeout(initial); window.clearInterval(timer); };
-  }, []);
+  }, [securityPolicy?.backupEnabled]);
 
   useEffect(() => {
+    if (!securityPolicy?.usbAuditEnabled) return undefined;
     let previous = [];
     const scan = async () => {
       try {
@@ -68,6 +74,23 @@ const Dashboard = () => {
     };
     scan();
     const timer = window.setInterval(scan, 5_000);
+    return () => window.clearInterval(timer);
+  }, [securityPolicy?.usbAuditEnabled]);
+
+  useEffect(() => {
+    const refreshPolicy = async () => {
+      try {
+        const next = await loadDeviceSecurityPolicy({ request, storage: localStorage });
+        setSecurityPolicy((current) => {
+          if (sameDeviceSecurityPolicy(current, next)) return current;
+          const token = localStorage.getItem('token');
+          if (next.monitoringEnabled) native.startAttendanceMonitoring(token, next).catch(console.error);
+          else native.stopMonitoring().catch(console.error);
+          return next;
+        });
+      } catch (error) { console.error('Security policy refresh failed:', error); }
+    };
+    const timer = window.setInterval(refreshPolicy, 60_000);
     return () => window.clearInterval(timer);
   }, []);
 
@@ -106,11 +129,11 @@ const Dashboard = () => {
       try {
         const current = await restoreAuthorizedMonitoring({
           heartbeat: () => sendDeviceHeartbeat({ request, storage: localStorage }),
-          restore: () => restoreAttendanceMonitoring({
-            request,
-            native,
-            token: localStorage.getItem("token"),
-          }),
+          restore: async () => {
+            const policy = await loadDeviceSecurityPolicy({ request, storage: localStorage });
+            setSecurityPolicy(policy);
+            return restoreAttendanceMonitoring({ request, native, token: localStorage.getItem("token"), policy });
+          },
         });
         setAttendance(current || null);
       } catch (err) {
@@ -127,10 +150,10 @@ const Dashboard = () => {
   }, []);
 
   useEffect(() => {
-    if (!attendanceLoaded || attendance) return undefined;
+    if (!attendanceLoaded || attendance || !securityPolicy?.attendanceRemindersEnabled) return undefined;
     native.startAttendanceReminders().catch(console.error);
     return () => native.stopAttendanceReminders().catch(console.error);
-  }, [attendanceLoaded, attendance]);
+  }, [attendanceLoaded, attendance, securityPolicy?.attendanceRemindersEnabled]);
 
   const clockIn = async () => {
     try {

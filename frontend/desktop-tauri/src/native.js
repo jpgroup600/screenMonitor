@@ -8,8 +8,8 @@ export const native = {
     (await win.isMaximized()) ? win.unmaximize() : win.maximize();
   },
   close: () => getCurrentWindow().hide(),
-  startMonitoring: (token, intervalMs) => invoke('start_monitoring', { token, intervalMs, deviceId: localStorage.getItem('screenMonitorDeviceId') }),
-  startAttendanceMonitoring: (token) => invoke('start_attendance_monitoring', { token, deviceId: localStorage.getItem('screenMonitorDeviceId') }),
+  startMonitoring: (token, intervalMs, policy) => invoke('start_monitoring', { token, intervalMs, policy, deviceId: localStorage.getItem('screenMonitorDeviceId') }),
+  startAttendanceMonitoring: (token, policy) => invoke('start_attendance_monitoring', { token, policy, deviceId: localStorage.getItem('screenMonitorDeviceId') }),
   stopMonitoring: () => invoke('stop_monitoring'),
   captureScreenshot: () => invoke('capture_screenshot'),
   startAttendanceReminders: () => invoke('start_attendance_reminders'),

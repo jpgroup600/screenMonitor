@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { FiCpu, FiRefreshCw, FiSearch, FiShield, FiWifi, FiWifiOff } from 'react-icons/fi';
 import request from '../Actions/request';
 import { isDeviceOnline } from '../deviceStatus';
+import SecurityPolicyModal from '../Components/SecurityPolicyModal';
 
 export default function Devices() {
   const [devices, setDevices] = useState([]);
@@ -9,6 +10,7 @@ export default function Devices() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [updating, setUpdating] = useState('');
+  const [policyDevice, setPolicyDevice] = useState(null);
 
   const load = async () => {
     try {
@@ -90,13 +92,16 @@ export default function Devices() {
                   <td className="px-5 py-4"><span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs ${online ? 'bg-emerald-500/15 text-emerald-400' : 'bg-slate-700 text-slate-300'}`}>{online ? <FiWifi /> : <FiWifiOff />}{online ? '온라인' : '오프라인'}</span></td>
                   <td className="max-w-sm truncate px-5 py-4 text-slate-400" title={device.operatingSystem}>{device.operatingSystem}</td>
                   <td className="whitespace-nowrap px-5 py-4">{new Date(device.lastSeenAt).toLocaleString()}</td>
-                  <td className="px-5 py-4"><button disabled={updating === device.id} onClick={() => changeStatus(device)} className={`rounded-lg px-4 py-2 font-medium disabled:opacity-50 ${device.status === 'Blocked' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}`}>{device.status === 'Blocked' ? '차단 해제' : '차단'}</button></td>
+                  <td className="whitespace-nowrap px-5 py-4"><button onClick={() => setPolicyDevice(device)} className="mr-2 rounded-lg bg-blue-600 px-4 py-2 font-medium hover:bg-blue-700">정책 설정</button><button disabled={updating === device.id} onClick={() => changeStatus(device)} className={`rounded-lg px-4 py-2 font-medium disabled:opacity-50 ${device.status === 'Blocked' ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-rose-600 hover:bg-rose-700'}`}>{device.status === 'Blocked' ? '차단 해제' : '차단'}</button></td>
                 </tr>;
               })}</tbody>
             </table></div>
           )}
         </section>
       </div>
+      {policyDevice && (
+        <SecurityPolicyModal device={policyDevice} onClose={() => setPolicyDevice(null)} />
+      )}
     </div>
   );
 }
