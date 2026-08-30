@@ -15,6 +15,8 @@ use std::{
     },
     time::Duration,
 };
+
+const SERVICE_EVENT_RETRY_BATCH_SIZE: usize = 100;
 use tokio::sync::Mutex;
 
 pub struct MonitorSession {
@@ -284,7 +286,16 @@ async fn retry_service_events(
     spool: &ServiceSpool,
     device_id: &str,
 ) -> Result<(), String> {
-    for path in spool.pending()? {
+    retry_service_events_batch(api, spool, device_id, SERVICE_EVENT_RETRY_BATCH_SIZE).await
+}
+
+async fn retry_service_events_batch(
+    api: &ApiClient,
+    spool: &ServiceSpool,
+    device_id: &str,
+    limit: usize,
+) -> Result<(), String> {
+    for path in spool.pending()?.into_iter().take(limit) {
         let event = spool.read(&path)?;
         let details = serde_json::json!({
             "serviceEventId": event.id,
@@ -362,6 +373,37 @@ mod tests {
 
         accepted.assert();
         assert!(spool.pending().unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn service_spool_retry_is_bounded_per_cycle() {
+        let server = MockServer::start();
+        let _accepted = server.mock(|when, then| {
+            when.method(POST).path("/api/security-events");
+            then.status(200);
+        });
+        let directory = tempfile::tempdir().unwrap();
+        let spool = ServiceSpool::new(directory.path().to_path_buf()).unwrap();
+        for index in 0..3 {
+            spool
+                .enqueue(&crate::service_spool::ServiceEvent::new(
+                    "FILE_MODIFIED",
+                    format!(r"C:\Work\plan-{index}.txt"),
+                    "{}".into(),
+                ))
+                .unwrap();
+        }
+
+        retry_service_events_batch(
+            &ApiClient::new(format!("{}/api", server.base_url()), "token".into()),
+            &spool,
+            "device-1",
+            2,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(spool.pending().unwrap().len(), 1);
     }
 
     #[tokio::test]
