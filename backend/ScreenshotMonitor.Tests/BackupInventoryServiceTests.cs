@@ -87,6 +87,23 @@ public class BackupInventoryServiceTests
         Assert.Equal(2, await db.BackupPathRules.CountAsync());
     }
 
+    [Fact]
+    public async Task Unchanged_files_are_visible_but_never_queued_for_upload()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        var run = await service.StartAsync("employee-1", "device-1");
+        await service.AddBatchAsync(run.Id, "employee-1", new[] {
+            new InventoryEntry(@"C:\Work\same.txt", 1, 1, false),
+            new InventoryEntry(@"C:\Work\changed.txt", 2, 2, true) });
+        await service.CompleteInventoryAsync(run.Id, "employee-1");
+        var progress = await service.ProgressAsync(run.Id);
+        Assert.Equal(1, progress!.Unchanged); Assert.Equal(1, progress.Pending);
+        Assert.True(await service.StartBackupAsync(run.Id));
+        var pending = await service.PendingItemsAsync(run.Id, "employee-1", "device-1", 10);
+        Assert.Single(pending); Assert.EndsWith("changed.txt", pending[0].Path);
+    }
+
     private static User Employee() => new() { Id = "employee-1", FullName = "Employee", Email = "e@example.com", PasswordHash = "hash", Role = "Employee", Designation = "", PhoneNumber = "" };
     private static SmDbContext CreateDb() => new(new DbContextOptionsBuilder<SmDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 }

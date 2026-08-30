@@ -20,6 +20,7 @@ struct FileSignature {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MissingFile {
     pub path: PathBuf,
+    pub size_bytes: u64,
     pub content_hash: Option<String>,
 }
 
@@ -81,6 +82,7 @@ impl BackupManifest {
             .filter(|(path, _)| !current.contains(*path))
             .map(|(path, signature)| MissingFile {
                 path: PathBuf::from(path.replace('/', "\\")),
+                size_bytes: signature.size_bytes,
                 content_hash: signature.content_hash.clone(),
             })
             .collect()
@@ -171,6 +173,7 @@ mod tests {
             manifest.missing_files(&[kept]),
             vec![MissingFile {
                 path: PathBuf::from(r"c:\work\removed.txt"),
+                size_bytes: 20,
                 content_hash: Some("b".repeat(64)),
             }]
         );

@@ -80,7 +80,7 @@ public class BackupsController(BackupService service, BackupRestoreService resto
 
     [Authorize(Roles = "Employee,Admin"), HttpPost("inventory/runs/{runId}/files")]
     public async Task<ActionResult<object>> AddInventoryBatch(string runId, InventoryBatchDto request) =>
-        Ok(new { added = await inventoryService.AddBatchAsync(runId, EmployeeId, request.Files.Select(x => new InventoryEntry(x.Path, x.SizeBytes, x.ModifiedUnixSeconds))) });
+        Ok(new { added = await inventoryService.AddBatchAsync(runId, EmployeeId, request.Files.Select(x => new InventoryEntry(x.Path, x.SizeBytes, x.ModifiedUnixSeconds, x.RequiresBackup))) });
 
     [Authorize(Roles = "Employee,Admin"), HttpPost("inventory/runs/{runId}/complete")]
     public async Task<IActionResult> CompleteInventory(string runId) =>
@@ -114,7 +114,7 @@ public class BackupsController(BackupService service, BackupRestoreService resto
     public async Task<ActionResult<InventoryProgressDto>> InventoryProgress(string runId)
     {
         var value = await inventoryService.ProgressAsync(runId);
-        return value is null ? NotFound() : Ok(new InventoryProgressDto(value.RunId, value.Status, value.Total, value.Pending, value.BackedUp, value.Failed, value.Excluded));
+        return value is null ? NotFound() : Ok(new InventoryProgressDto(value.RunId, value.Status, value.Total, value.Pending, value.BackedUp, value.Failed, value.Excluded, value.Unchanged));
     }
 
     [Authorize(Roles = "Admin"), HttpGet("inventory/runs/{runId}/files")]

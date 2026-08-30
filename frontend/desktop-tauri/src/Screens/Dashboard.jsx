@@ -49,11 +49,11 @@ const Dashboard = () => {
     const initial = window.setTimeout(processQueue, 10_000);
     const timer = window.setInterval(processQueue, 60_000);
     return () => { window.clearTimeout(initial); window.clearInterval(timer); };
-  }, [securityPolicy?.backupEnabled]);
+  }, [securityPolicy?.backupEnabled, securityPolicy?.fileChangeAuditEnabled]);
 
   useEffect(() => {
     if (!securityPolicy?.backupEnabled) return undefined;
-    const backup = () => runBackupCycle({ native, storage: localStorage }).catch((error) => console.error("Incremental backup failed:", error));
+    const backup = () => runBackupCycle({ native, storage: localStorage, policy: securityPolicy }).catch((error) => console.error("Incremental backup failed:", error));
     const initial = window.setTimeout(backup, BACKUP_INITIAL_DELAY_MS);
     const timer = window.setInterval(backup, BACKUP_INTERVAL_MS);
     return () => { window.clearTimeout(initial); window.clearInterval(timer); };

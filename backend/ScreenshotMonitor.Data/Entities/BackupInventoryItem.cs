@@ -12,6 +12,7 @@ public class BackupInventoryItem
     [Required, MaxLength(2048)] public string Path { get; set; } = string.Empty;
     public long SizeBytes { get; set; }
     public long? ModifiedUnixSeconds { get; set; }
+    public bool RequiresBackup { get; set; } = true;
     [Required, MaxLength(20)] public string Status { get; set; } = "Pending";
     [MaxLength(2048)] public string? Error { get; set; }
     public DateTime DiscoveredAt { get; set; }

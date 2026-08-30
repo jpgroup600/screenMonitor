@@ -226,6 +226,7 @@ async fn run_incremental_backup(
     token: String,
     device_id: String,
     roots: Vec<String>,
+    file_change_audit_enabled: bool,
     state: State<'_, AppState>,
 ) -> Result<IncrementalBackupResult, String> {
     let client = api::ApiClient::new(BACKEND_URL.into(), token.clone());
@@ -252,6 +253,37 @@ async fn run_incremental_backup(
     })
     .await
     .map_err(|error| error.to_string())?;
+    let manifest = backup_manifest::BackupManifest::load(&state.backup_manifest_path)?;
+    let changed = manifest
+        .changed_files(&inventory.files)
+        .into_iter()
+        .collect::<std::collections::HashSet<_>>();
+    if file_change_audit_enabled {
+        let mut next_manifest = manifest.clone();
+        for missing in manifest.missing_files(&inventory.files) {
+            let destination = find_relocation(&missing, &inventory.files, &changed);
+            let (event_type, details) = match destination.as_ref() {
+                Some(path) => (
+                    "FILE_MOVED",
+                    serde_json::json!({ "destination": path }).to_string(),
+                ),
+                None => ("FILE_DELETED", "{}".to_owned()),
+            };
+            if client
+                .security_event(
+                    &device_id,
+                    event_type,
+                    &missing.path.to_string_lossy(),
+                    &details,
+                )
+                .await
+                .is_ok()
+            {
+                next_manifest.remove(&missing.path);
+            }
+        }
+        next_manifest.save(&state.backup_manifest_path)?;
+    }
     let inventory_run = client.start_inventory(&device_id).await?;
     for batch in inventory.files.chunks(500) {
         let files = batch
@@ -260,6 +292,7 @@ async fn run_incremental_backup(
                 path: file.path.to_str().unwrap_or_default(),
                 size_bytes: file.size_bytes,
                 modified_unix_seconds: file.modified_unix_seconds,
+                requires_backup: changed.contains(&file.path),
             })
             .collect::<Vec<_>>();
         client
@@ -269,7 +302,7 @@ async fn run_incremental_backup(
     client.complete_inventory(&inventory_run.id).await?;
     return Ok(IncrementalBackupResult {
         scanned_files: inventory.files.len(),
-        changed_files: 0,
+        changed_files: changed.len(),
         uploaded_files: 0,
         failed_files: 0,
         skipped_entries: inventory.skipped_entries,
@@ -401,6 +434,50 @@ async fn run_incremental_backup(
     })
 }
 
+fn find_relocation(
+    missing: &backup_manifest::MissingFile,
+    inventory: &[backup_inventory::InventoryFile],
+    changed: &std::collections::HashSet<PathBuf>,
+) -> Option<PathBuf> {
+    let expected_hash = missing.content_hash.as_ref()?;
+    inventory
+        .iter()
+        .filter(|file| changed.contains(&file.path) && file.size_bytes == missing.size_bytes)
+        .find(|file| backup_staging::sha256_file(&file.path).ok().as_ref() == Some(expected_hash))
+        .map(|file| file.path.clone())
+}
+
+#[cfg(test)]
+mod relocation_tests {
+    use super::*;
+
+    #[test]
+    fn moved_file_is_identified_by_size_and_content_hash() {
+        let directory = tempfile::tempdir().unwrap();
+        let destination = directory.path().join("renamed.txt");
+        std::fs::write(&destination, b"company-data").unwrap();
+        let hash = backup_staging::sha256_file(&destination).unwrap();
+        let inventory = vec![backup_inventory::InventoryFile {
+            path: destination.clone(),
+            size_bytes: 12,
+            modified_unix_seconds: Some(2),
+        }];
+        let missing = backup_manifest::MissingFile {
+            path: PathBuf::from(r"C:\Work\original.txt"),
+            size_bytes: 12,
+            content_hash: Some(hash),
+        };
+        assert_eq!(
+            find_relocation(
+                &missing,
+                &inventory,
+                &std::collections::HashSet::from([destination.clone()])
+            ),
+            Some(destination)
+        );
+    }
+}
+
 #[tauri::command]
 async fn process_inventory_backup(
     token: String,
@@ -448,12 +525,23 @@ async fn process_inventory_backup(
             if upload.is_ok() {
                 let _ = std::fs::remove_file(&staged.container_path);
             }
-            upload
+            upload.map(|_| staged.content_hash)
         }
         .await;
         match result {
-            Ok(()) => {
+            Ok(content_hash) => {
                 uploaded += 1;
+                let mut manifest =
+                    backup_manifest::BackupManifest::load(&state.backup_manifest_path)?;
+                manifest.mark_uploaded(
+                    &backup_inventory::InventoryFile {
+                        path: source.clone(),
+                        size_bytes: item.size_bytes,
+                        modified_unix_seconds: item.modified_unix_seconds,
+                    },
+                    Some(content_hash),
+                );
+                manifest.save(&state.backup_manifest_path)?;
                 client
                     .inventory_result(&item.id, &device_id, true, None)
                     .await?;

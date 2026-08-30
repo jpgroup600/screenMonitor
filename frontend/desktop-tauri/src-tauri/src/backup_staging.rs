@@ -51,7 +51,7 @@ pub fn stage_file(source: &Path, staging_directory: &Path) -> Result<StagedBacku
     })
 }
 
-fn sha256_file(path: &Path) -> Result<String, String> {
+pub(crate) fn sha256_file(path: &Path) -> Result<String, String> {
     let mut file = File::open(path).map_err(|error| error.to_string())?;
     let mut hasher = Sha256::new();
     let mut buffer = vec![0_u8; CHUNK_BYTES];

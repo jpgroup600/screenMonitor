@@ -50,6 +50,8 @@ pub struct InventoryRun {
 pub struct InventoryPendingItem {
     pub id: String,
     pub path: String,
+    pub size_bytes: u64,
+    pub modified_unix_seconds: Option<u64>,
 }
 
 #[derive(Serialize)]
@@ -58,6 +60,7 @@ pub struct InventoryFile<'a> {
     pub path: &'a str,
     pub size_bytes: u64,
     pub modified_unix_seconds: Option<u64>,
+    pub requires_backup: bool,
 }
 
 #[derive(Serialize)]
@@ -555,6 +558,7 @@ mod tests {
                     path: r"C:\Work\a.txt",
                     size_bytes: 10,
                     modified_unix_seconds: Some(1),
+                    requires_backup: true,
                 }],
             )
             .await

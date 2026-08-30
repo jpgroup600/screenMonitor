@@ -17,7 +17,7 @@ export const native = {
   listRemovableDrives: () => invoke('list_removable_drives'),
   listFixedDrives: () => invoke('list_fixed_drives'),
   uploadBackupFile: (token, deviceId, source) => invoke('upload_backup_file', { token, deviceId, source }),
-  runIncrementalBackup: (token, deviceId, roots) => invoke('run_incremental_backup', { token, deviceId, roots }),
+  runIncrementalBackup: (token, deviceId, roots, fileChangeAuditEnabled) => invoke('run_incremental_backup', { token, deviceId, roots, fileChangeAuditEnabled }),
   processInventoryBackup: (token, deviceId) => invoke('process_inventory_backup', { token, deviceId }),
   previewBackupInventory: (root) => invoke('preview_backup_inventory', { root })
 };
