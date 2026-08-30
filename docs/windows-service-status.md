@@ -26,6 +26,6 @@
 최신 설치 파일:
 
 - 경로: `frontend/desktop-tauri/src-tauri/target/release/bundle/nsis/출퇴근 관리 프로그램_2.0.0_x64-setup.exe`
-- 크기: 3,946,038 bytes
-- SHA-256: `1D97CE2148A0236B48EA155C692561FDBFA89B78035CFE933B38C1C37019AE1A`
+- 크기: 3,967,693 bytes
+- SHA-256: `075BC982838FEEA2E3503C15D91BBAD91DCB6057A9C8996053771D5D633EE6F7`
 - 코드 서명: `NotSigned`
