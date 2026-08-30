@@ -36,3 +36,18 @@
 - 크기: 4,051,858 bytes
 - SHA-256: `ECFBBF3357C0F6E36023CD3910D3CCF9590DDBB201C4D7966DAA8C73557243BB`
 - 코드 서명: `NotSigned`
+
+## 2026-08-31 서비스 자동 복구 검증
+
+- Rust 서비스 설치 소스가 루트 `**/bin/` 규칙에 제외되던 문제를 수정해 `src/bin/screen-monitor-agent.rs`를 Git 추적 대상으로 포함했다.
+- 서비스 설치 시 실패 동작을 `60초 후 재시작` 3회로 설정하고 실패 횟수는 24시간 후 초기화한다.
+- 복구 정책 단위 테스트 1건과 기존 Rust 라이브러리 테스트 69건이 통과했다.
+- 최신 설치본으로 업그레이드한 뒤 `sc.exe qfailure ScreenMonitorAgent`에서 재시작 3회와 초기화 주기 86,400초를 확인했다.
+- 설치 서비스는 `RUNNING`이며 설치 바이너리와 릴리스 바이너리 SHA-256이 일치한다: `92534DA6BE8072B14E4ED93FD5DB4CE9B6C9DD9FCE4686EEE0E5840603065B33`.
+
+최신 설치 파일:
+
+- 경로: `frontend/desktop-tauri/src-tauri/target/release/bundle/nsis/출퇴근 관리 프로그램_2.0.0_x64-setup.exe`
+- 크기: 4,053,380 bytes
+- SHA-256: `E39E35ED16EAD3D468750EE8E28EA03A9509D5F9CCFFA41BF9DD95DABBF246B3`
+- 코드 서명: `NotSigned`

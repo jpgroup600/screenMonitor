@@ -2,5 +2,7 @@
 .nuget-packages/
 .dotnet-tools/
 **/bin/
+!frontend/desktop-tauri/src-tauri/src/bin/
+!frontend/desktop-tauri/src-tauri/src/bin/*.rs
 **/obj/
 frontend/desktop-tauri/src-tauri/binaries/*.exe
