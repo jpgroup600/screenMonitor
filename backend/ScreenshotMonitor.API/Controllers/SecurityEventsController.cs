@@ -10,11 +10,12 @@ namespace ScreenshotMonitor.API.Controllers;
 public class SecurityEventsController(SecurityEventService service) : ControllerBase
 {
     private string EmployeeId => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? throw new UnauthorizedAccessException();
-    [Authorize(Roles = "Employee,Admin"), HttpPost]
+    [Authorize(Roles = "Employee"), HttpPost]
     public async Task<ActionResult<SecurityEventResponseDto>> Record(SecurityEventRequestDto request)
     {
         try { return Ok(ToResponse(await service.RecordAsync(EmployeeId, request.DeviceId, request.EventType, request.Source, request.Details))); }
         catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
+        catch (UnauthorizedAccessException) { return Forbid(); }
     }
     [Authorize(Roles = "Admin"), HttpGet]
     public async Task<ActionResult<IEnumerable<SecurityEventResponseDto>>> List([FromQuery] int take = 200) => Ok((await service.ListAsync(take)).Select(ToResponse));
