@@ -1,9 +1,23 @@
 #[cfg(windows)]
 pub(crate) fn protect(input: &[u8]) -> Result<Vec<u8>, String> {
+    use windows_sys::Win32::Security::Cryptography::CRYPTPROTECT_UI_FORBIDDEN;
+    protect_with_flags(input, CRYPTPROTECT_UI_FORBIDDEN)
+}
+
+#[cfg(windows)]
+pub(crate) fn protect_machine(input: &[u8]) -> Result<Vec<u8>, String> {
+    use windows_sys::Win32::Security::Cryptography::{
+        CRYPTPROTECT_LOCAL_MACHINE, CRYPTPROTECT_UI_FORBIDDEN,
+    };
+    protect_with_flags(input, CRYPTPROTECT_UI_FORBIDDEN | CRYPTPROTECT_LOCAL_MACHINE)
+}
+
+#[cfg(windows)]
+fn protect_with_flags(input: &[u8], flags: u32) -> Result<Vec<u8>, String> {
     use std::ptr::{null, null_mut};
     use windows_sys::Win32::{
         Foundation::LocalFree,
-        Security::Cryptography::{CryptProtectData, CRYPTPROTECT_UI_FORBIDDEN, CRYPT_INTEGER_BLOB},
+        Security::Cryptography::{CryptProtectData, CRYPT_INTEGER_BLOB},
     };
     let input_blob = CRYPT_INTEGER_BLOB {
         cbData: input.len() as u32,
@@ -20,7 +34,7 @@ pub(crate) fn protect(input: &[u8]) -> Result<Vec<u8>, String> {
             null(),
             null(),
             null(),
-            CRYPTPROTECT_UI_FORBIDDEN,
+            flags,
             &mut output,
         )
     };
@@ -70,6 +84,11 @@ pub(crate) fn unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+#[cfg(windows)]
+pub(crate) fn unprotect_machine(input: &[u8]) -> Result<Vec<u8>, String> {
+    unprotect(input)
+}
+
 #[cfg(not(windows))]
 pub(crate) fn protect(input: &[u8]) -> Result<Vec<u8>, String> {
     Ok(input.to_vec())
@@ -78,4 +97,15 @@ pub(crate) fn protect(input: &[u8]) -> Result<Vec<u8>, String> {
 #[cfg(not(windows))]
 pub(crate) fn unprotect(input: &[u8]) -> Result<Vec<u8>, String> {
     Ok(input.to_vec())
+}
+
+
+#[cfg(not(windows))]
+pub(crate) fn protect_machine(input: &[u8]) -> Result<Vec<u8>, String> {
+    protect(input)
+}
+
+#[cfg(not(windows))]
+pub(crate) fn unprotect_machine(input: &[u8]) -> Result<Vec<u8>, String> {
+    unprotect(input)
 }

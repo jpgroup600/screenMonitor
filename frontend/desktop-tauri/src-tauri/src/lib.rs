@@ -11,9 +11,15 @@ mod monitor;
 mod network_audit;
 mod offline_queue;
 mod platform;
+mod service_spool;
+mod service_config;
+#[cfg(windows)]
+pub mod service_agent;
 
 use monitor::MonitorSession;
 use offline_queue::OfflineQueue;
+use service_config::ServiceConfig;
+use service_spool::ServiceSpool;
 use serde::Serialize;
 use std::path::PathBuf;
 use std::{
@@ -39,6 +45,8 @@ struct AppState {
     backup_manifest_path: PathBuf,
     backup_retry_directory: PathBuf,
     restore_directory: PathBuf,
+    service_config_path: PathBuf,
+    service_spool: Arc<ServiceSpool>,
 }
 
 impl AppState {
@@ -59,6 +67,7 @@ impl AppState {
             .parent()
             .ok_or("Invalid application data directory")?
             .join("restores");
+        let shared_directory = service_config::program_data_directory();
         Ok(Self {
             session: Mutex::new(None),
             reminder: Mutex::new(None),
@@ -68,7 +77,20 @@ impl AppState {
             backup_manifest_path,
             backup_retry_directory,
             restore_directory,
+            service_config_path: shared_directory.join("agent-policy.dat"),
+            service_spool: Arc::new(ServiceSpool::new(shared_directory.join("service-spool"))?),
         })
+    }
+
+    fn save_service_policy(&self, policy: &monitor::MonitoringPolicy) -> Result<(), String> {
+        ServiceConfig {
+            file_change_audit_enabled: policy.file_change_audit_enabled,
+            network_audit_enabled: policy.network_audit_enabled,
+            usb_audit_enabled: policy.usb_audit_enabled,
+            usb_file_copy_audit_enabled: policy.usb_file_copy_audit_enabled,
+            roots: platform::fixed_drives(),
+        }
+        .save(&self.service_config_path)
     }
 }
 
@@ -80,29 +102,58 @@ struct ReminderSession {
 #[serde(rename_all = "camelCase")]
 struct AgentStatus {
     agent_version: &'static str,
-    agent_mode: &'static str,
-    monitoring_state: &'static str,
+    agent_mode: String,
+    monitoring_state: String,
     pending_queue_items: usize,
 }
 
 #[tauri::command]
 fn agent_status(state: State<'_, AppState>) -> Result<AgentStatus, String> {
-    let monitoring_state = if state
+    let user_session_running = state
         .session
         .lock()
         .map_err(|error| error.to_string())?
-        .is_some()
-    {
-        "Running"
-    } else {
-        "Stopped"
-    };
+        .is_some();
+    let (agent_mode, monitoring_state) = resolve_agent_runtime(user_session_running, windows_service_state());
     Ok(AgentStatus {
         agent_version: env!("CARGO_PKG_VERSION"),
-        agent_mode: "UserSession",
+        agent_mode,
         monitoring_state,
-        pending_queue_items: state.queue.pending()?.len(),
+        pending_queue_items: state.queue.pending()?.len() + state.service_spool.pending()?.len(),
     })
+}
+
+fn resolve_agent_runtime(user_session_running: bool, service_running: Option<bool>) -> (String, String) {
+    let mode = if service_running.is_some() { "WindowsService+UserSession" } else { "UserSession" };
+    let state = if user_session_running || service_running == Some(true) { "Running" } else { "Stopped" };
+    (mode.to_owned(), state.to_owned())
+}
+
+#[cfg(windows)]
+fn windows_service_state() -> Option<bool> {
+    use windows_service::{
+        service::{ServiceAccess, ServiceState},
+        service_manager::{ServiceManager, ServiceManagerAccess},
+    };
+    let manager = ServiceManager::local_computer(None::<&str>, ServiceManagerAccess::CONNECT).ok()?;
+    let service = manager.open_service("ScreenMonitorAgent", ServiceAccess::QUERY_STATUS).ok()?;
+    let status = service.query_status().ok()?;
+    Some(matches!(status.current_state, ServiceState::Running | ServiceState::StartPending))
+}
+
+#[cfg(not(windows))]
+fn windows_service_state() -> Option<bool> { None }
+
+#[cfg(test)]
+mod agent_runtime_tests {
+    use super::resolve_agent_runtime;
+
+    #[test]
+    fn reports_hybrid_mode_when_service_is_installed() {
+        assert_eq!(resolve_agent_runtime(false, Some(true)), ("WindowsService+UserSession".into(), "Running".into()));
+        assert_eq!(resolve_agent_runtime(true, Some(false)), ("WindowsService+UserSession".into(), "Running".into()));
+        assert_eq!(resolve_agent_runtime(false, None), ("UserSession".into(), "Stopped".into()));
+    }
 }
 
 impl ReminderSession {
@@ -119,6 +170,7 @@ fn start_monitoring(
     policy: monitor::MonitoringPolicy,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    state.save_service_policy(&policy)?;
     let mut session = state.session.lock().map_err(|e| e.to_string())?;
     if let Some(existing) = session.take() {
         existing.stop();
@@ -132,6 +184,7 @@ fn start_monitoring(
         device_id,
         state.restore_directory.clone(),
         policy,
+        Some(state.service_spool.clone()),
     ));
     Ok(())
 }
@@ -143,6 +196,7 @@ fn start_attendance_monitoring(
     policy: monitor::MonitoringPolicy,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
+    state.save_service_policy(&policy)?;
     let mut session = state.session.lock().map_err(|e| e.to_string())?;
     if let Some(existing) = session.take() {
         existing.stop();
@@ -156,6 +210,7 @@ fn start_attendance_monitoring(
         device_id,
         state.restore_directory.clone(),
         policy,
+        Some(state.service_spool.clone()),
     ));
     Ok(())
 }

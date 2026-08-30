@@ -3,3 +3,4 @@
 .dotnet-tools/
 **/bin/
 **/obj/
+frontend/desktop-tauri/src-tauri/binaries/*.exe

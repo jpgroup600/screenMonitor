@@ -1,0 +1,27 @@
+# Windows 서비스 구현 현황
+
+업데이트: 2026-08-31
+
+- Tauri 사용자 화면과 별도로 부팅 시 자동 시작되는 `ScreenMonitorAgent` Windows 서비스를 추가했다.
+- 서비스는 직원 JWT나 서버 인증정보를 저장하지 않는다. 관리자 정책으로 허용된 파일 변경, USB 연결·해제/USB 파일 변경, 외부 TCP 연결 근거만 로컬 스풀에 기록한다.
+- 서비스 정책과 스풀은 Windows DPAPI `LOCAL_MACHINE` 범위로 암호화하고, 설치 시 ProgramData 폴더 ACL을 SYSTEM·Administrators·설치 사용자로 제한한다.
+- 정책 파일이 없거나 읽을 수 없으면 모든 서비스 수집은 기본 OFF다. Tauri가 인증 후 받은 장치별 관리자 스위치를 암호화 정책 파일에 원자적으로 반영하며 서비스는 5초 간격으로 다시 적용한다.
+- 서비스 이벤트는 임시 확장자로 쓴 뒤 원자적으로 완료 확장자로 전환한다. 최대 256MB로 제한하며 서버가 HTTP 성공으로 수락한 항목만 삭제한다.
+- USB 파일 이벤트는 실제 복사를 확정하지 않고 `confirmedCopy: false`, 네트워크 이벤트도 `confirmedFileTransfer: false`로 보존한다.
+- NSIS는 시스템 전체 설치로 구성하고 서비스 바이너리 포함, 자동 시작 등록, 제거 시 서비스 삭제를 수행한다.
+- 관리자 장치 상태에는 서비스 설치 여부를 반영한 `WindowsService+UserSession` 실행 방식과 서비스/UI 통합 Running 상태가 표시된다.
+- 검증: Rust 48개, Tauri JavaScript 17개 테스트 통과. 서비스/메인 앱 바이너리 선택 오류를 발견해 Cargo 기본 실행 대상을 UI 앱으로 고정했다.
+
+제한 사항:
+
+- 화면 캡처와 활성 창은 Windows Session 0 제약 때문에 계속 사용자 세션 Tauri에서 수행한다.
+- 서비스 이벤트는 Tauri가 로그인·인증된 상태가 되면 서버로 전달된다.
+- 설치 파일은 아직 회사 코드 서명 인증서로 서명되지 않았다.
+- 운영 Railway 배포는 보존정책의 자동 삭제 기능에 대한 명시적 승인 전까지 보류한다.
+
+최신 설치 파일:
+
+- 경로: `frontend/desktop-tauri/src-tauri/target/release/bundle/nsis/출퇴근 관리 프로그램_2.0.0_x64-setup.exe`
+- 크기: 3,946,038 bytes
+- SHA-256: `1D97CE2148A0236B48EA155C692561FDBFA89B78035CFE933B38C1C37019AE1A`
+- 코드 서명: `NotSigned`

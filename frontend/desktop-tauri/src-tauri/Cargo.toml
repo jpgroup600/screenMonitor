@@ -3,6 +3,7 @@ name = "screen-monitor-desktop"
 version = "2.0.0"
 description = "Native employee activity monitor"
 edition = "2021"
+default-run = "screen-monitor-desktop"
 
 [lib]
 name = "screen_monitor_desktop_lib"
@@ -29,6 +30,7 @@ notify = "8"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_Storage_FileSystem", "Win32_System_SystemInformation", "Win32_System_Threading", "Win32_System_WindowsProgramming", "Win32_UI_WindowsAndMessaging", "Win32_UI_Input_KeyboardAndMouse"] }
+windows-service = "0.8"
 
 [dev-dependencies]
 httpmock = "0.8.3"

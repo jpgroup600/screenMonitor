@@ -6,12 +6,23 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm run build && npm run build:agent",
     "frontendDist": "../dist"
   },
   "app": {
     "windows": [{ "label": "main", "title": "출퇴근 관리 프로그램", "width": 900, "height": 650, "decorations": false, "center": true }],
     "security": { "csp": null }
   },
-  "bundle": { "active": true, "targets": "nsis", "icon": [] }
+  "bundle": {
+    "active": true,
+    "targets": "nsis",
+    "icon": [],
+    "externalBin": ["binaries/screen-monitor-agent"],
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "installer-hooks.nsh"
+      }
+    }
+  }
 }

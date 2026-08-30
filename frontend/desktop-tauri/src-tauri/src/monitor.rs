@@ -3,6 +3,7 @@ use crate::{
     core::{scaled_dimensions, screenshot_file_name, ActivityTracker},
     offline_queue::{OfflineQueue, QueuedRequest},
     platform,
+    service_spool::ServiceSpool,
 };
 use screenshots::Screen;
 use serde::Deserialize;
@@ -29,6 +30,10 @@ pub struct MonitoringPolicy {
     pub network_audit_enabled: bool,
     pub file_change_audit_enabled: bool,
     pub restore_enabled: bool,
+    #[serde(default)]
+    pub usb_audit_enabled: bool,
+    #[serde(default)]
+    pub usb_file_copy_audit_enabled: bool,
 }
 
 impl MonitorSession {
@@ -45,6 +50,7 @@ pub fn spawn(
     device_id: String,
     restore_directory: PathBuf,
     policy: MonitoringPolicy,
+    service_spool: Option<Arc<ServiceSpool>>,
 ) -> MonitorSession {
     let running = Arc::new(AtomicBool::new(true));
     let task_running = running.clone();
@@ -101,6 +107,9 @@ pub fn spawn(
                 }
                 _ = retry_tick.tick() => {
                     let _ = retry_pending(&api, &queue).await;
+                    if let Some(spool) = service_spool.as_deref() {
+                        let _ = retry_service_events(&api, spool, &device_id).await;
+                    }
                 }
                 _ = restore_tick.tick() => {
                     if policy.restore_enabled { let _ = process_restore_requests(&api, &device_id, &restore_directory).await; }
@@ -266,6 +275,26 @@ async fn retry_pending(api: &ApiClient, queue: &OfflineQueue) -> Result<(), Stri
     Ok(())
 }
 
+async fn retry_service_events(
+    api: &ApiClient,
+    spool: &ServiceSpool,
+    device_id: &str,
+) -> Result<(), String> {
+    for path in spool.pending()? {
+        let event = spool.read(&path)?;
+        let details = serde_json::json!({
+            "serviceEventId": event.id,
+            "occurredAtUnixMs": event.occurred_at_unix_ms,
+            "payload": serde_json::from_str::<serde_json::Value>(&event.details).unwrap_or_else(|_| serde_json::Value::String(event.details.clone()))
+        }).to_string();
+        if api.security_event(device_id, &event.event_type, &event.source, &details).await.is_err() {
+            break;
+        }
+        spool.complete(&path)?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -279,7 +308,9 @@ mod tests {
             "idleTrackingEnabled": false,
             "networkAuditEnabled": true,
             "fileChangeAuditEnabled": true,
-            "restoreEnabled": false
+            "restoreEnabled": false,
+            "usbAuditEnabled": true,
+            "usbFileCopyAuditEnabled": false
         }))
         .unwrap();
         assert!(!policy.screenshots_enabled);
@@ -288,6 +319,32 @@ mod tests {
         assert!(policy.network_audit_enabled);
         assert!(policy.file_change_audit_enabled);
         assert!(!policy.restore_enabled);
+        assert!(policy.usb_audit_enabled);
+        assert!(!policy.usb_file_copy_audit_enabled);
+    }
+
+
+    #[tokio::test]
+    async fn service_spool_deletes_only_events_accepted_by_server() {
+        let server = MockServer::start();
+        let accepted = server.mock(|when, then| {
+            when.method(POST).path("/api/security-events");
+            then.status(200);
+        });
+        let directory = tempfile::tempdir().unwrap();
+        let spool = ServiceSpool::new(directory.path().to_path_buf()).unwrap();
+        spool.enqueue(&crate::service_spool::ServiceEvent::new(
+            "FILE_MODIFIED", r"C:\Work\plan.txt", "{}".into()
+        )).unwrap();
+
+        retry_service_events(
+            &ApiClient::new(format!("{}/api", server.base_url()), "token".into()),
+            &spool,
+            "device-1",
+        ).await.unwrap();
+
+        accepted.assert();
+        assert!(spool.pending().unwrap().is_empty());
     }
 
     #[tokio::test]
