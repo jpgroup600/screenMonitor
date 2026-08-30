@@ -104,6 +104,27 @@ public class BackupInventoryServiceTests
         Assert.Single(pending); Assert.EndsWith("changed.txt", pending[0].Path);
     }
 
+    [Fact]
+    public async Task Folders_aggregate_all_descendant_files_for_folder_policy_management()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        var run = await service.StartAsync("employee-1", "device-1");
+        await service.AddBatchAsync(run.Id, "employee-1", new[] {
+            new InventoryEntry(@"C:\Users\ASUS\Desktop\a.txt", 10, 1),
+            new InventoryEntry(@"C:\Users\ASUS\Desktop\Work\b.txt", 20, 2),
+            new InventoryEntry(@"C:\Users\ASUS\Documents\c.txt", 30, 3, false) });
+        await service.CompleteInventoryAsync(run.Id, "employee-1");
+
+        var folders = await service.ListFoldersAsync(run.Id, "Desktop");
+
+        var desktop = Assert.Single(folders, x => x.Path == @"C:\Users\ASUS\Desktop");
+        Assert.Equal(2, desktop.FileCount);
+        Assert.Equal(30, desktop.SizeBytes);
+        Assert.Equal(2, desktop.Pending);
+        Assert.Contains(folders, x => x.Path == @"C:\Users\ASUS\Desktop\Work" && x.FileCount == 1);
+    }
+
     private static User Employee() => new() { Id = "employee-1", FullName = "Employee", Email = "e@example.com", PasswordHash = "hash", Role = "Employee", Designation = "", PhoneNumber = "" };
     private static SmDbContext CreateDb() => new(new DbContextOptionsBuilder<SmDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 }

@@ -3,6 +3,7 @@ import { FiArchive, FiRefreshCw, FiSearch, FiX } from 'react-icons/fi';
 import request from '../Actions/request';
 import { formatBytes, newestVersionsFirst, restoreRequestPayload } from '../backupFile';
 import { selectedInventoryItems, toggleAllInventorySelection, toggleInventorySelection } from '../inventorySelection';
+import { effectiveFolderRule, folderDisplayName, normalizeFolderSearch } from '../folderPolicy';
 
 const statusLabel = { Scanning: '파일 목록 수집 중', InventoryReady: '정책 확인 대기', BackingUp: '백업 진행 중', Completed: '완료', Pending: '대기', BackedUp: '완료', Failed: '실패', Excluded: '제외', Unchanged: '변경 없음' };
 
@@ -13,6 +14,9 @@ export default function Backups() {
   const [inventory, setInventory] = useState([]);
   const [inventorySearch, setInventorySearch] = useState('');
   const [inventoryStatus, setInventoryStatus] = useState('');
+  const [folders, setFolders] = useState([]);
+  const [folderSearch, setFolderSearch] = useState('');
+  const [rules, setRules] = useState([]);
   const [selectedInventoryIds, setSelectedInventoryIds] = useState(() => new Set());
   const [bulkUpdating, setBulkUpdating] = useState(false);
   const [files, setFiles] = useState([]);
@@ -39,6 +43,20 @@ export default function Backups() {
     setProgress(nextProgress); setInventory(items || []);
   }, [runId, inventorySearch, inventoryStatus]);
 
+  const loadFolders = useCallback(async () => {
+    if (!runId) return;
+    const run = runs.find((value) => value.id === runId);
+    if (!run) return;
+    const query = new URLSearchParams({ take: '5000' });
+    const normalizedSearch = normalizeFolderSearch(folderSearch);
+    if (normalizedSearch) query.set('search', normalizedSearch);
+    const [nextFolders, nextRules] = await Promise.all([
+      request.get(`/backups/inventory/runs/${runId}/folders?${query}`),
+      request.get(`/backups/inventory/rules?deviceId=${encodeURIComponent(run.deviceId)}`),
+    ]);
+    setFolders(nextFolders || []); setRules(nextRules || []);
+  }, [runId, runs, folderSearch]);
+
   const loadArchive = useCallback(async () => {
     const query = new URLSearchParams({ take: '500' });
     if (search.trim()) query.set('search', search.trim());
@@ -46,13 +64,14 @@ export default function Backups() {
   }, [search]);
 
   const refresh = useCallback(async () => {
-    try { setLoading(true); setMessage(''); await loadRuns(); await Promise.all([loadInventory(), loadArchive()]); }
+    try { setLoading(true); setMessage(''); await loadRuns(); await Promise.all([loadInventory(), loadFolders(), loadArchive()]); }
     catch (error) { console.error(error); setMessage('백업 정보를 불러오지 못했습니다.'); }
     finally { setLoading(false); }
-  }, [loadRuns, loadInventory, loadArchive]);
+  }, [loadRuns, loadInventory, loadFolders, loadArchive]);
 
   useEffect(() => { loadRuns().then(loadArchive).finally(() => setLoading(false)); }, []);
   useEffect(() => { loadInventory(); const timer = window.setInterval(loadInventory, 5000); return () => window.clearInterval(timer); }, [loadInventory]);
+  useEffect(() => { loadFolders(); }, [loadFolders]);
   useEffect(() => { setSelectedInventoryIds(new Set()); }, [runId, inventorySearch, inventoryStatus]);
 
   const setRule = async (item, action) => {
@@ -60,6 +79,12 @@ export default function Backups() {
     await request.put('/backups/inventory/rules', { deviceId: run.deviceId, path: item.path, action });
     setMessage(`${item.path} 경로를 ${action === 'Exclude' ? '블랙리스트' : '화이트리스트'}로 설정했습니다.`);
     await loadInventory();
+  };
+  const setFolderRule = async (folder, action) => {
+    const run = runs.find((value) => value.id === runId);
+    await request.put('/backups/inventory/rules', { deviceId: run.deviceId, path: folder.path, action });
+    setMessage(`${folder.path} 폴더와 하위 항목을 ${action === 'Exclude' ? '백업 제외' : '백업 포함'}로 설정했습니다.`);
+    await Promise.all([loadFolders(), loadInventory()]);
   };
   const selectedItems = selectedInventoryItems(selectedInventoryIds, inventory);
   const allVisibleSelected = inventory.length > 0 && selectedItems.length === inventory.length;
@@ -88,9 +113,14 @@ export default function Backups() {
     <section className="space-y-4 rounded-2xl border border-slate-800 bg-slate-900/70 p-5">
       <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-semibold">스캔 진행 상황</h2><p className="mt-1 text-sm text-slate-400">{progress ? statusLabel[progress.status] || progress.status : '스캔 기록 대기 중'}</p></div><div className="flex gap-2"><select value={runId} onChange={(e) => setRunId(e.target.value)} className="max-w-xs rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">{runs.map((run) => <option key={run.id} value={run.id}>{run.employeeName || run.employeeId} · {new Date(run.startedAt).toLocaleString()}</option>)}</select>{progress?.status === 'InventoryReady' && <button onClick={startBackup} className="rounded-lg bg-emerald-600 px-4 py-2 font-medium">백업 시작</button>}</div></div>
       <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">{[['전체','total'],['백업 대기','pending'],['완료','backedUp'],['변경 없음','unchanged'],['실패','failed'],['제외','excluded']].map(([label,key]) => <div key={key} className="rounded-xl bg-slate-950/60 p-4"><p className="text-xs text-slate-500">{label}</p><p className="mt-1 text-2xl font-bold">{progress?.[key] || 0}</p></div>)}</div>
+      <section className="space-y-3"><div className="flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">폴더별 백업 정책</h3><p className="text-xs text-slate-500">상위 폴더 정책은 하위 전체에 적용되고, 더 구체적인 하위 정책이 우선합니다.</p></div><form onSubmit={(event) => { event.preventDefault(); loadFolders(); }} className="flex gap-2"><input value={folderSearch} onChange={(event) => setFolderSearch(event.target.value)} placeholder="바탕화면, 문서 또는 폴더 경로" className="min-w-72 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"/><button className="rounded-lg bg-blue-600 px-4 py-2 text-sm">폴더 검색</button></form></div>
+        <div className="max-h-[420px] overflow-auto rounded-xl border border-slate-800"><table className="min-w-full text-left text-sm"><thead className="sticky top-0 bg-slate-950 text-xs text-slate-500"><tr><th className="px-4 py-3">폴더</th><th className="px-4 py-3">파일</th><th className="px-4 py-3">용량</th><th className="px-4 py-3">적용 정책</th><th className="px-4 py-3">설정</th></tr></thead><tbody className="divide-y divide-slate-800">{folders.map((folder) => { const policy = effectiveFolderRule(folder.path, rules); return <tr key={folder.path}><td className="px-4 py-3"><div style={{ paddingLeft: `${Math.min(folder.depth, 8) * 10}px` }}><p className="font-medium">{folderDisplayName(folder)}</p><p className="break-all font-mono text-xs text-slate-500">{folder.path}</p></div></td><td className="whitespace-nowrap px-4 py-3">{folder.fileCount}</td><td className="whitespace-nowrap px-4 py-3">{formatBytes(folder.sizeBytes)}</td><td className="px-4 py-3"><span className={policy.action === 'Exclude' ? 'text-rose-400' : 'text-emerald-400'}>{policy.action === 'Exclude' ? '백업 제외' : '백업 포함'}</span>{policy.inherited && <span className="ml-1 text-xs text-slate-500">(상위/기본)</span>}</td><td className="whitespace-nowrap px-4 py-3"><button onClick={() => setFolderRule(folder, 'Include')} className="mr-2 rounded bg-emerald-500/15 px-2 py-1 text-xs text-emerald-400">폴더 포함</button><button onClick={() => setFolderRule(folder, 'Exclude')} className="rounded bg-rose-500/15 px-2 py-1 text-xs text-rose-400">폴더 제외</button></td></tr>; })}</tbody></table>{!folders.length && <p className="p-8 text-center text-slate-500">스캔된 폴더가 없습니다.</p>}</div>
+      </section>
+      <details className="rounded-xl border border-slate-800 p-4"><summary className="cursor-pointer font-semibold">개별 파일 보기 및 예외 설정</summary><div className="mt-4 space-y-3">
       <form onSubmit={(e) => { e.preventDefault(); loadInventory(); }} className="flex flex-wrap gap-2"><label className="flex min-w-64 flex-1 items-center gap-2 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"><FiSearch/><input value={inventorySearch} onChange={(e) => setInventorySearch(e.target.value)} placeholder="파일 경로 검색" className="w-full bg-transparent text-sm outline-none"/></label><select value={inventoryStatus} onChange={(e) => setInventoryStatus(e.target.value)} className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"><option value="">전체 상태</option><option value="Pending">대기</option><option value="BackedUp">완료</option><option value="Unchanged">변경 없음</option><option value="Failed">실패</option><option value="Excluded">제외</option></select><button className="rounded-lg bg-blue-600 px-5 py-2">검색</button></form>
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-950/50 px-4 py-3"><span className="text-sm text-slate-400">{selectedItems.length}개 선택됨</span><div className="flex gap-2"><button type="button" disabled={!selectedItems.length || bulkUpdating} onClick={() => setBulkRule('Include')} className="rounded bg-emerald-600 px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40">선택 항목 화이트</button><button type="button" disabled={!selectedItems.length || bulkUpdating} onClick={() => setBulkRule('Exclude')} className="rounded bg-rose-600 px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-40">선택 항목 블랙</button></div></div>
-      <div className="max-h-[420px] overflow-auto rounded-xl border border-slate-800"><table className="min-w-full text-left text-sm"><thead className="sticky top-0 bg-slate-950 text-xs text-slate-500"><tr><th className="w-12 px-4 py-3"><input type="checkbox" aria-label="현재 목록 전체 선택" checked={allVisibleSelected} onChange={(event) => setSelectedInventoryIds((current) => toggleAllInventorySelection(current, inventory, event.target.checked))}/></th><th className="px-4 py-3">파일 경로</th><th className="px-4 py-3">크기</th><th className="px-4 py-3">상태</th><th className="px-4 py-3">정책</th></tr></thead><tbody className="divide-y divide-slate-800">{inventory.map((item) => <tr key={item.id} className={selectedInventoryIds.has(item.id) ? 'bg-blue-500/10' : ''}><td className="px-4 py-3"><input type="checkbox" aria-label={`${item.path} 선택`} checked={selectedInventoryIds.has(item.id)} onChange={(event) => setSelectedInventoryIds((current) => toggleInventorySelection(current, item.id, event.target.checked))}/></td><td className="max-w-3xl break-all px-4 py-3 font-mono text-xs">{item.path}</td><td className="whitespace-nowrap px-4 py-3">{formatBytes(item.sizeBytes)}</td><td className="px-4 py-3">{statusLabel[item.status] || item.status}</td><td className="whitespace-nowrap px-4 py-3"><button onClick={() => setRule(item, 'Include')} className="mr-2 rounded bg-emerald-500/15 px-2 py-1 text-xs text-emerald-400">화이트</button><button onClick={() => setRule(item, 'Exclude')} className="rounded bg-rose-500/15 px-2 py-1 text-xs text-rose-400">블랙</button></td></tr>)}</tbody></table>{!inventory.length && <p className="p-8 text-center text-slate-500">등록된 파일 목록이 없습니다.</p>}</div>
+      <div className="max-h-[420px] overflow-auto rounded-xl border border-slate-800"><table className="min-w-full text-left text-sm"><thead className="sticky top-0 bg-slate-950 text-xs text-slate-500"><tr><th className="w-12 px-4 py-3"><input type="checkbox" aria-label="현재 목록 전체 선택" checked={allVisibleSelected} onChange={(event) => setSelectedInventoryIds((current) => toggleAllInventorySelection(current, inventory, event.target.checked))}/></th><th className="px-4 py-3">파일 경로</th><th className="px-4 py-3">크기</th><th className="px-4 py-3">상태</th><th className="px-4 py-3">정책</th></tr></thead><tbody className="divide-y divide-slate-800">{inventory.map((item) => <tr key={item.id} className={selectedInventoryIds.has(item.id) ? 'bg-blue-500/10' : ''}><td className="px-4 py-3"><input type="checkbox" aria-label={`${item.path} 선택`} checked={selectedInventoryIds.has(item.id)} onChange={(event) => setSelectedInventoryIds((current) => toggleInventorySelection(current, item.id, event.target.checked))}/></td><td className="max-w-3xl break-all px-4 py-3 font-mono text-xs">{item.path}</td><td className="whitespace-nowrap px-4 py-3">{formatBytes(item.sizeBytes)}</td><td className="px-4 py-3">{statusLabel[item.status] || item.status}</td><td className="whitespace-nowrap px-4 py-3"><button onClick={() => setRule(item, 'Include')} className="mr-2 rounded bg-emerald-500/15 px-2 py-1 text-xs text-emerald-400">포함 예외</button><button onClick={() => setRule(item, 'Exclude')} className="rounded bg-rose-500/15 px-2 py-1 text-xs text-rose-400">제외 예외</button></td></tr>)}</tbody></table>{!inventory.length && <p className="p-8 text-center text-slate-500">등록된 파일 목록이 없습니다.</p>}</div>
+      </div></details>
     </section>
     <section className="space-y-4"><h2 className="text-xl font-semibold">완료된 백업 버전</h2><form onSubmit={(e) => { e.preventDefault(); loadArchive(); }} className="flex gap-2"><input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="직원, 장치, 원본 경로 검색" className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2"/><button className="rounded-lg bg-blue-600 px-5 py-2">검색</button></form><div className="overflow-x-auto rounded-xl border border-slate-800"><table className="min-w-full text-left text-sm"><thead className="bg-slate-950 text-xs text-slate-500"><tr><th className="px-4 py-3">원본 경로</th><th className="px-4 py-3">직원</th><th className="px-4 py-3">버전</th><th className="px-4 py-3">최근 백업</th></tr></thead><tbody className="divide-y divide-slate-800">{files.map((file) => <tr key={file.id} onClick={() => openDetail(file.id)} className="cursor-pointer hover:bg-slate-800/50"><td className="break-all px-4 py-3 font-mono text-xs">{file.originalPath}</td><td className="px-4 py-3">{file.employeeName}</td><td className="px-4 py-3">{file.versionCount}</td><td className="px-4 py-3">{new Date(file.lastBackedUpAt).toLocaleString()}</td></tr>)}</tbody></table></div></section>
   </div>{selected && <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4" onClick={() => setSelected(null)}><section className="max-h-[85vh] w-full max-w-3xl overflow-auto rounded-2xl border border-slate-700 bg-slate-900 p-6" onClick={(e) => e.stopPropagation()}><div className="flex justify-between"><div><p className="flex items-center gap-2 text-blue-400"><FiArchive/>버전 기록</p><h2 className="mt-2 break-all font-mono text-sm">{selected.originalPath}</h2></div><button onClick={() => setSelected(null)}><FiX/></button></div><div className="mt-5 space-y-3">{newestVersionsFirst(selected.versions).map((version) => <article key={version.id} className="rounded-xl bg-slate-950/60 p-4"><div className="flex justify-between"><span>{new Date(version.uploadedAt).toLocaleString()} · {formatBytes(version.plainSizeBytes)}</span><button onClick={() => restore(version.id)} className="rounded bg-blue-600 px-3 py-1 text-xs">복원</button></div><p className="mt-2 break-all font-mono text-xs text-slate-500">SHA-256 {version.contentHash}</p></article>)}</div></section></div>}</div>;

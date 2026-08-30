@@ -21,7 +21,27 @@ public class AttendanceServiceTests
 
         Assert.Equal(first.Id, second.Id);
         Assert.Single(db.AttendanceRecords);
-        Assert.Empty(db.Sessions);
+        Assert.Single(db.Sessions);
+        Assert.Equal(first.ClockInAt, db.Sessions.Single().StartTime);
+    }
+
+    [Fact]
+    public async Task ClockIn_rotates_off_hours_monitoring_into_a_new_work_session()
+    {
+        await using var db = CreateDb();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 29, 1, 0, 0, TimeSpan.Zero));
+        var offHours = new Session { Id = "off-hours", EmployeeId = "employee-1", StartTime = clock.GetUtcNow().UtcDateTime.AddHours(-1), Status = "Active" };
+        db.Sessions.Add(offHours);
+        await db.SaveChangesAsync();
+        var service = new AttendanceService(db, clock);
+
+        var attendance = await service.ClockInAsync("employee-1");
+
+        Assert.Equal("Complete", offHours.Status);
+        Assert.Equal(attendance.ClockInAt, offHours.EndTime);
+        var workSession = Assert.Single(db.Sessions.Where(x => x.Status == "Active"));
+        Assert.NotEqual(offHours.Id, workSession.Id);
+        Assert.Equal(attendance.ClockInAt, workSession.StartTime);
     }
 
     [Fact]
@@ -41,16 +61,17 @@ public class AttendanceServiceTests
         Assert.Equal(TimeSpan.FromMinutes(7), completed.TotalIdleDuration);
         Assert.Equal("Complete", completed.Status);
         Assert.Single(db.AttendanceIdlePeriods);
-        Assert.Empty(db.Sessions);
+        Assert.Equal(2, db.Sessions.Count());
     }
 
     [Fact]
-    public async Task Clock_out_does_not_stop_the_independent_monitoring_session()
+    public async Task Clock_out_rotates_the_general_monitoring_session_without_stopping_tracking()
     {
         await using var db = CreateDb();
         var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 29, 0, 0, 0, TimeSpan.Zero));
         var service = new AttendanceService(db, clock);
         await service.ClockInAsync("employee-1");
+        var monitoringSession = db.Sessions.Single();
         var projectSession = new Session
         {
             EmployeeId = "employee-1",
@@ -61,7 +82,7 @@ public class AttendanceServiceTests
         db.Sessions.Add(projectSession);
         db.SessionForegroundApps.Add(new SessionForegroundApp
         {
-            SessionId = projectSession.Id,
+            SessionId = monitoringSession.Id,
             AppName = "editor",
             StartTime = clock.GetUtcNow().UtcDateTime,
             Status = "Active"
@@ -72,10 +93,12 @@ public class AttendanceServiceTests
         await service.ClockOutAsync("employee-1");
 
         Assert.Equal("Active", projectSession.Status);
-        Assert.Equal(TimeSpan.Zero, projectSession.ActiveDuration);
+        Assert.Equal("Complete", monitoringSession.Status);
+        Assert.Equal(TimeSpan.FromHours(1), monitoringSession.ActiveDuration);
+        Assert.Single(db.Sessions.Where(x => x.ProjectId == null && x.Status == "Active"));
         var app = Assert.Single(db.SessionForegroundApps);
-        Assert.Equal("Active", app.Status);
-        Assert.Equal(TimeSpan.Zero, app.TotalUsageTime);
+        Assert.Equal("Inactive", app.Status);
+        Assert.Equal(TimeSpan.FromHours(1), app.TotalUsageTime);
     }
 
     [Fact]
@@ -88,7 +111,7 @@ public class AttendanceServiceTests
         Assert.False(await service.ResumeMonitoringAsync("employee-1"));
         await service.ClockInAsync("employee-1");
         Assert.True(await service.ResumeMonitoringAsync("employee-1"));
-        Assert.Empty(db.Sessions);
+        Assert.Single(db.Sessions);
     }
 
     [Fact]
@@ -168,7 +191,8 @@ public class AttendanceServiceTests
         Assert.Equal("Complete", (await db.AttendanceRecords.FindAsync("old"))!.Status);
         Assert.Equal(cutoff, (await db.AttendanceRecords.FindAsync("old"))!.ClockOutAt);
         Assert.Equal("Active", (await db.AttendanceRecords.FindAsync("new"))!.Status);
-        Assert.Equal("Active", (await db.Sessions.FindAsync("monitoring"))!.Status);
+        Assert.Equal("Complete", (await db.Sessions.FindAsync("monitoring"))!.Status);
+        Assert.Single(db.Sessions.Where(x => x.EmployeeId == "employee-1" && x.Status == "Active" && x.StartTime == cutoff));
     }
 
     [Theory]

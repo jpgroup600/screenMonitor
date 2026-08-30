@@ -132,6 +132,11 @@ public class BackupsController(BackupService service, BackupRestoreService resto
         Ok((await inventoryService.ListItemsAsync(runId, search, status, skip, take)).Select(x =>
             new InventoryItemDto(x.Id, x.RunId, x.Path, x.SizeBytes, x.ModifiedUnixSeconds, x.Status, x.Error, x.DiscoveredAt, x.BackedUpAt)));
 
+    [Authorize(Roles = "Admin"), HttpGet("inventory/runs/{runId}/folders")]
+    public async Task<ActionResult<IEnumerable<InventoryFolderDto>>> InventoryFolders(string runId, [FromQuery] string? search = null, [FromQuery] int take = 1000) =>
+        Ok((await inventoryService.ListFoldersAsync(runId, search, take)).Select(x =>
+            new InventoryFolderDto(x.Path, x.Name, x.ParentPath, x.Depth, x.FileCount, x.SizeBytes, x.Pending, x.BackedUp, x.Failed, x.Excluded, x.Unchanged)));
+
     [Authorize(Roles = "Admin"), HttpGet("inventory/rules")]
     public async Task<ActionResult<IEnumerable<BackupPathRuleDto>>> InventoryRules([FromQuery] string deviceId) =>
         Ok((await inventoryService.ListRulesAsync(deviceId)).Select(ToRule));

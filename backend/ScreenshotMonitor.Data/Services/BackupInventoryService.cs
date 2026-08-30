@@ -10,6 +10,7 @@ namespace ScreenshotMonitor.Data.Services;
 
 public record InventoryEntry(string Path, long SizeBytes, long? ModifiedUnixSeconds, bool RequiresBackup = true);
 public record InventoryProgress(string RunId, string Status, int Total, int Pending, int BackedUp, int Failed, int Excluded, int Unchanged);
+public record InventoryFolder(string Path, string Name, string? ParentPath, int Depth, int FileCount, long SizeBytes, int Pending, int BackedUp, int Failed, int Excluded, int Unchanged);
 
 public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
 {
@@ -110,6 +111,68 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         if (!string.IsNullOrWhiteSpace(search)) { var keyword = search.Trim().ToLower(); query = query.Where(x => x.Path.ToLower().Contains(keyword)); }
         if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status);
         return await query.OrderBy(x => x.Path).Skip(Math.Max(skip, 0)).Take(Math.Clamp(take, 1, 500)).ToListAsync();
+    }
+
+    public async Task<List<InventoryFolder>> ListFoldersAsync(string runId, string? search, int take = 1000)
+    {
+        var files = await db.BackupInventoryItems.AsNoTracking().Where(x => x.RunId == runId)
+            .Select(x => new { x.Path, x.SizeBytes, x.Status }).ToListAsync();
+        var folders = AggregateFolders(files.Select(x => (x.Path, x.SizeBytes, x.Status)));
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var keyword = search.Trim();
+            folders = folders.Where(x => x.Path.Contains(keyword, StringComparison.OrdinalIgnoreCase)
+                || x.Name.Contains(keyword, StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+        return folders.OrderBy(x => x.Path).Take(Math.Clamp(take, 1, 5000)).ToList();
+    }
+
+    internal static List<InventoryFolder> AggregateFolders(IEnumerable<(string Path, long SizeBytes, string Status)> files)
+    {
+        var totals = new Dictionary<string, (int Files, long Bytes, int Pending, int BackedUp, int Failed, int Excluded, int Unchanged)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var file in files)
+        {
+            foreach (var folder in ParentFolders(file.Path))
+            {
+                var value = totals.GetValueOrDefault(folder);
+                value.Files++;
+                value.Bytes += file.SizeBytes;
+                if (file.Status == "Pending") value.Pending++;
+                else if (file.Status == "BackedUp") value.BackedUp++;
+                else if (file.Status == "Failed") value.Failed++;
+                else if (file.Status == "Excluded") value.Excluded++;
+                else if (file.Status == "Unchanged") value.Unchanged++;
+                totals[folder] = value;
+            }
+        }
+        return totals.Select(pair => {
+            var path = pair.Key;
+            var parent = ParentFolder(path);
+            var name = path.EndsWith(":\\", StringComparison.Ordinal) ? path : path[(path.LastIndexOf('\\') + 1)..];
+            var depth = path.EndsWith(":\\", StringComparison.Ordinal) ? 0 : path.Count(character => character == '\\');
+            var value = pair.Value;
+            return new InventoryFolder(path, name, parent, depth, value.Files, value.Bytes, value.Pending, value.BackedUp, value.Failed, value.Excluded, value.Unchanged);
+        }).ToList();
+    }
+
+    private static IEnumerable<string> ParentFolders(string filePath)
+    {
+        var current = ParentFolder(filePath);
+        while (current is not null)
+        {
+            yield return current;
+            current = ParentFolder(current);
+        }
+    }
+
+    private static string? ParentFolder(string path)
+    {
+        var normalized = path.Replace('/', '\\').TrimEnd('\\');
+        if (normalized.Length == 2 && normalized[1] == ':') return null;
+        var separator = normalized.LastIndexOf('\\');
+        if (separator < 0) return null;
+        if (separator == 2 && normalized[1] == ':') return normalized[..3];
+        return separator == 0 ? "\\" : normalized[..separator];
     }
 
     public Task<List<BackupPathRule>> ListRulesAsync(string deviceId) => db.BackupPathRules.AsNoTracking()

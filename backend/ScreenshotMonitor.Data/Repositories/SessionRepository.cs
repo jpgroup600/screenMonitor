@@ -260,7 +260,7 @@ public class SessionRepository(
     public async Task<Session> EnsureMonitoringSessionAsync(string employeeId)
     {
         var existing = await _dbContext.Sessions
-            .Where(session => session.EmployeeId == employeeId && session.Status == "Active")
+            .Where(session => session.EmployeeId == employeeId && session.ProjectId == null && session.Status == "Active")
             .OrderByDescending(session => session.StartTime)
             .FirstOrDefaultAsync();
         if (existing is not null) return existing;

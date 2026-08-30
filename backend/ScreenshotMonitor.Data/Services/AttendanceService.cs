@@ -29,6 +29,7 @@ public class AttendanceService(SmDbContext dbContext, TimeProvider timeProvider)
             ClockInAt = timeProvider.GetUtcNow().UtcDateTime
         };
         dbContext.AttendanceRecords.Add(record);
+        await RotateMonitoringSessionAsync(employeeId, record.ClockInAt);
         await dbContext.SaveChangesAsync();
         return record;
     }
@@ -42,6 +43,7 @@ public class AttendanceService(SmDbContext dbContext, TimeProvider timeProvider)
         CloseIdlePeriod(record, now);
         record.ClockOutAt = now;
         record.Status = "Complete";
+        await RotateMonitoringSessionAsync(employeeId, now);
         await dbContext.SaveChangesAsync();
         return record;
     }
@@ -95,9 +97,35 @@ public class AttendanceService(SmDbContext dbContext, TimeProvider timeProvider)
             }
             record.ClockOutAt = cutoffUtc;
             record.Status = "Complete";
+            await RotateMonitoringSessionAsync(record.EmployeeId, cutoffUtc);
         }
         if (records.Count > 0) await dbContext.SaveChangesAsync();
         return records.Count;
+    }
+
+    private async Task RotateMonitoringSessionAsync(string employeeId, DateTime boundary)
+    {
+        var activeSessions = await dbContext.Sessions.Include(x => x.ForegroundApps)
+            .Where(x => x.EmployeeId == employeeId && x.ProjectId == null && x.Status == "Active").ToListAsync();
+        foreach (var session in activeSessions)
+        {
+            foreach (var app in session.ForegroundApps.Where(x => x.Status == "Active"))
+            {
+                app.EndTime = boundary;
+                app.TotalUsageTime = boundary > app.StartTime ? boundary - app.StartTime : TimeSpan.Zero;
+                app.Status = "Inactive";
+            }
+            session.EndTime = boundary;
+            session.ActiveDuration = boundary > session.StartTime ? boundary - session.StartTime : TimeSpan.Zero;
+            session.Status = "Complete";
+        }
+        dbContext.Sessions.Add(new Session {
+            EmployeeId = employeeId,
+            ProjectId = null,
+            StartTime = boundary,
+            ActiveDuration = TimeSpan.Zero,
+            Status = "Active"
+        });
     }
 
     public static DateTime LatestSeoulFourAmCutoff(DateTimeOffset nowUtc)
