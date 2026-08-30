@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs,
     path::{Path, PathBuf},
-    time::UNIX_EPOCH,
+    time::{Duration, UNIX_EPOCH},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -21,15 +21,19 @@ pub struct InventoryResult {
 }
 
 pub fn scan(root: &Path, policy: &BackupPolicy) -> InventoryResult {
+    scan_throttled(root, policy, Duration::ZERO)
+}
+
+pub fn scan_throttled(root: &Path, policy: &BackupPolicy, delay_per_entry: Duration) -> InventoryResult {
     let mut result = InventoryResult::default();
-    scan_directory(root, policy, &mut result);
+    scan_directory(root, policy, delay_per_entry, &mut result);
     result
         .files
         .sort_by(|left, right| left.path.cmp(&right.path));
     result
 }
 
-fn scan_directory(directory: &Path, policy: &BackupPolicy, result: &mut InventoryResult) {
+fn scan_directory(directory: &Path, policy: &BackupPolicy, delay_per_entry: Duration, result: &mut InventoryResult) {
     if !policy.should_include(directory, None) {
         result.skipped_entries += 1;
         return;
@@ -44,6 +48,7 @@ fn scan_directory(directory: &Path, policy: &BackupPolicy, result: &mut Inventor
     };
 
     for entry in entries {
+        if !delay_per_entry.is_zero() { std::thread::sleep(delay_per_entry); }
         let entry = match entry {
             Ok(entry) => entry,
             Err(_) => {
@@ -66,7 +71,7 @@ fn scan_directory(directory: &Path, policy: &BackupPolicy, result: &mut Inventor
         }
 
         if metadata.is_dir() {
-            scan_directory(&path, policy, result);
+            scan_directory(&path, policy, delay_per_entry, result);
             continue;
         }
 

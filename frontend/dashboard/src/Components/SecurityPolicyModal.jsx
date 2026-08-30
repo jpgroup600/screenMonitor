@@ -35,6 +35,10 @@ export default function SecurityPolicyModal({ device, onClose }) {
           <PolicyNumber label="장치 한도(GB)" value={Math.round(Number(policy.maxBackupBytes || 0) / 1024 ** 3)} min={1} max={10240} onChange={(value) => setPolicy((current) => ({...current, maxBackupBytes: value * 1024 ** 3}))}/>
           <PolicyNumber label="파일별 버전 수" value={policy.maxVersionsPerFile} min={1} max={1000} onChange={(value) => setPolicy((current) => ({...current, maxVersionsPerFile: value}))}/>
         </div>}
+        {policy.resourceThrottlingEnabled && <div className="mt-4 grid gap-3 rounded-xl border border-slate-800 p-4 sm:grid-cols-2">
+          <PolicyNumber label="스캔 파일당 대기(ms)" value={policy.scanThrottleMilliseconds} min={0} max={1000} onChange={(value) => setPolicy((current) => ({...current, scanThrottleMilliseconds: value}))}/>
+          <PolicyNumber label="일일 업로드 한도(GB)" value={Math.round(Number(policy.dailyUploadLimitBytes || 0) / 1024 ** 3)} min={1} max={10240} onChange={(value) => setPolicy((current) => ({...current, dailyUploadLimitBytes: value * 1024 ** 3}))}/>
+        </div>}
         <p className="mt-4 text-xs text-amber-300">시스템 영역과 브라우저 인증정보 등 강제 제외 경로는 이 설정과 관계없이 수집되지 않습니다.</p>
         <div className="mt-6 flex justify-end"><button disabled={saving} onClick={save} className="flex items-center gap-2 rounded-lg bg-blue-600 px-5 py-2.5 font-medium hover:bg-blue-700 disabled:opacity-50"><FiSave/>{saving ? '저장 중...' : '정책 저장'}</button></div>
       </>}

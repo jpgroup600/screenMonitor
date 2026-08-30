@@ -6,7 +6,7 @@ describe("backup scheduler", () => {
     const native = { listFixedDrives: vi.fn().mockResolvedValue(["C:\\", "D:\\"]), runIncrementalBackup: vi.fn().mockResolvedValue({ uploadedFiles: 2 }) };
     const storage = { getItem: vi.fn((key) => ({ token: "token-1", screenMonitorDeviceId: "device-1" })[key]) };
     await runBackupCycle({ native, storage, policy: { fileChangeAuditEnabled: true } });
-    expect(native.runIncrementalBackup).toHaveBeenCalledWith("token-1", "device-1", ["C:\\", "D:\\"], true);
+    expect(native.runIncrementalBackup).toHaveBeenCalledWith("token-1", "device-1", ["C:\\", "D:\\"], true, 0);
     expect(BACKUP_INTERVAL_MS).toBe(21_600_000);
   });
 
@@ -19,7 +19,7 @@ describe("backup scheduler", () => {
   it("processes only the server-approved inventory queue", async () => {
     const native = { processInventoryBackup: vi.fn().mockResolvedValue({ uploadedFiles: 3 }) };
     const storage = { getItem: vi.fn((key) => ({ token: "token-1", screenMonitorDeviceId: "device-1" })[key]) };
-    await runBackupQueueCycle({ native, storage });
-    expect(native.processInventoryBackup).toHaveBeenCalledWith("token-1", "device-1");
+    await runBackupQueueCycle({ native, storage, policy: { resourceThrottlingEnabled: true, pauseBackupOnBattery: true, dailyUploadLimitBytes: 123 } });
+    expect(native.processInventoryBackup).toHaveBeenCalledWith("token-1", "device-1", { resourceThrottlingEnabled: true, pauseBackupOnBattery: true, dailyUploadLimitBytes: 123 });
   });
 });

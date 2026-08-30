@@ -11,6 +11,8 @@ export const securityPolicyModules = [
   ['attendanceRemindersEnabled', '출근 알림', '미출근 상태에서 10분 간격 알림'],
   ['restoreEnabled', '원격 복원', '관리자가 요청한 백업 버전을 원본 PC에 복원'],
   ['retentionEnabled', '백업 자동 정리', '보존 기간·장치 용량·파일별 버전 수에 따라 오래된 백업 정리'],
+  ['resourceThrottlingEnabled', '백업 리소스 제한', '스캔 속도와 일일 업로드 용량 제한 적용'],
+  ['pauseBackupOnBattery', '배터리 사용 중 백업 중지', '전원 어댑터가 분리되면 백업 업로드를 대기'],
 ];
 
 export function updateSecurityPolicy(policy, key, enabled) {
@@ -24,6 +26,8 @@ export function securityPolicyPayload(policy) {
     retentionDays: boundedInteger(policy.retentionDays, 1, 3650, 90),
     maxBackupBytes: boundedInteger(policy.maxBackupBytes, 1024 * 1024, 10 * 1024 ** 4, 50 * 1024 ** 3),
     maxVersionsPerFile: boundedInteger(policy.maxVersionsPerFile, 1, 1000, 20),
+    scanThrottleMilliseconds: boundedInteger(policy.scanThrottleMilliseconds, 0, 1000, 2),
+    dailyUploadLimitBytes: boundedInteger(policy.dailyUploadLimitBytes, 1024 * 1024, 10 * 1024 ** 4, 10 * 1024 ** 3),
   };
 }
 

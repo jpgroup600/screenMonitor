@@ -49,5 +49,7 @@ public class SecurityPoliciesController(DeviceSecurityPolicyService service) : C
         value.IdleTrackingEnabled, value.BackupEnabled, value.UsbAuditEnabled, value.UsbFileCopyAuditEnabled, value.NetworkAuditEnabled,
         value.FileChangeAuditEnabled, value.AttendanceRemindersEnabled, value.RestoreEnabled,
         value.RetentionEnabled, value.RetentionDays, value.MaxBackupBytes, value.MaxVersionsPerFile,
+        value.ResourceThrottlingEnabled, value.PauseBackupOnBattery,
+        value.ScanThrottleMilliseconds, value.DailyUploadLimitBytes,
         value.UpdatedByAdminId, value.UpdatedAt);
 }

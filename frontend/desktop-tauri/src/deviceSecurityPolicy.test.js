@@ -6,6 +6,12 @@ describe('device security policy', () => {
     expect(normalizeDeviceSecurityPolicy({ backupEnabled: false })).toEqual({ ...defaultDeviceSecurityPolicy, backupEnabled: false });
   });
 
+  it('rejects unsafe resource limits from the server', () => {
+    const policy = normalizeDeviceSecurityPolicy({ scanThrottleMilliseconds: 5000, dailyUploadLimitBytes: -1 });
+    expect(policy.scanThrottleMilliseconds).toBe(2);
+    expect(policy.dailyUploadLimitBytes).toBe(10 * 1024 ** 3);
+  });
+
   it('loads only the policy for the stable local device id', async () => {
     const request = { get: vi.fn().mockResolvedValue({ usbAuditEnabled: false }) };
     const storage = { getItem: vi.fn().mockReturnValue('device-1') };

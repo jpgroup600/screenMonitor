@@ -399,6 +399,9 @@ namespace ScreenshotMonitor.Data.Migrations
                     b.Property<bool>("BackupEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<long>("DailyUploadLimitBytes")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("DeviceId")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -422,6 +425,12 @@ namespace ScreenshotMonitor.Data.Migrations
                     b.Property<bool>("NetworkAuditEnabled")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("PauseBackupOnBattery")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("ResourceThrottlingEnabled")
+                        .HasColumnType("boolean");
+
                     b.Property<bool>("RestoreEnabled")
                         .HasColumnType("boolean");
 
@@ -433,6 +442,9 @@ namespace ScreenshotMonitor.Data.Migrations
 
                     b.Property<bool>("ScreenshotsEnabled")
                         .HasColumnType("boolean");
+
+                    b.Property<int>("ScanThrottleMilliseconds")
+                        .HasColumnType("integer");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");

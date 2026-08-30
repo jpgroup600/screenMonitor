@@ -13,6 +13,7 @@ mod offline_queue;
 mod platform;
 mod service_spool;
 mod service_config;
+mod upload_budget;
 #[cfg(windows)]
 pub mod service_agent;
 
@@ -48,6 +49,7 @@ struct AppState {
     restore_directory: PathBuf,
     service_config_path: PathBuf,
     service_spool: Arc<ServiceSpool>,
+    upload_budget: upload_budget::UploadBudget,
 }
 
 impl AppState {
@@ -69,6 +71,10 @@ impl AppState {
             .ok_or("Invalid application data directory")?
             .join("restores");
         let shared_directory = service_config::program_data_directory();
+        let upload_budget_path = queue_directory
+            .parent()
+            .ok_or("Invalid application data directory")?
+            .join("daily-upload-usage.dat");
         Ok(Self {
             session: Mutex::new(None),
             reminder: Mutex::new(None),
@@ -80,6 +86,7 @@ impl AppState {
             restore_directory,
             service_config_path: shared_directory.join("agent-policy.dat"),
             service_spool: Arc::new(ServiceSpool::new(shared_directory.join("service-spool"))?),
+            upload_budget: upload_budget::UploadBudget::new(upload_budget_path),
         })
     }
 
@@ -313,6 +320,7 @@ async fn run_incremental_backup(
     device_id: String,
     roots: Vec<String>,
     file_change_audit_enabled: bool,
+    scan_throttle_milliseconds: u64,
     state: State<'_, AppState>,
 ) -> Result<IncrementalBackupResult, String> {
     let client = api::ApiClient::new(BACKEND_URL.into(), token.clone());
@@ -330,7 +338,11 @@ async fn run_incremental_backup(
         let policy = backup_policy::BackupPolicy::default();
         let mut inventory = backup_inventory::InventoryResult::default();
         for root in roots {
-            let partial = backup_inventory::scan(std::path::Path::new(&root), &policy);
+            let partial = backup_inventory::scan_throttled(
+                std::path::Path::new(&root),
+                &policy,
+                Duration::from_millis(scan_throttle_milliseconds.min(1000)),
+            );
             inventory.files.extend(partial.files);
             inventory.skipped_entries += partial.skipped_entries;
             inventory.inaccessible_entries += partial.inaccessible_entries;
@@ -568,8 +580,14 @@ mod relocation_tests {
 async fn process_inventory_backup(
     token: String,
     device_id: String,
+    resource_throttling_enabled: bool,
+    pause_backup_on_battery: bool,
+    daily_upload_limit_bytes: u64,
     state: State<'_, AppState>,
 ) -> Result<IncrementalBackupResult, String> {
+    if resource_throttling_enabled && pause_backup_on_battery && platform::on_battery() {
+        return Ok(IncrementalBackupResult { scanned_files: 0, changed_files: 0, uploaded_files: 0, failed_files: 0, skipped_entries: 0, inaccessible_entries: 0 });
+    }
     let client = api::ApiClient::new(BACKEND_URL.into(), token);
     let Some(run) = client.active_inventory(&device_id).await? else {
         return Ok(IncrementalBackupResult {
@@ -596,6 +614,11 @@ async fn process_inventory_backup(
     let mut failed = 0;
     for item in items {
         let source = PathBuf::from(&item.path);
+        if resource_throttling_enabled && !state.upload_budget.allows(
+            item.size_bytes,
+            daily_upload_limit_bytes.max(1024 * 1024),
+            std::time::SystemTime::now(),
+        )? { continue; }
         if !backup_file_is_stable(
             &source,
             item.size_bytes,
@@ -626,6 +649,9 @@ async fn process_inventory_backup(
         match result {
             Ok(content_hash) => {
                 uploaded += 1;
+                if resource_throttling_enabled {
+                    state.upload_budget.record(item.size_bytes, std::time::SystemTime::now())?;
+                }
                 let mut manifest =
                     backup_manifest::BackupManifest::load(&state.backup_manifest_path)?;
                 manifest.mark_uploaded(

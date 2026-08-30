@@ -24,6 +24,10 @@ public class DeviceSecurityPolicy
     public int RetentionDays { get; set; } = 90;
     public long MaxBackupBytes { get; set; } = 50L * 1024 * 1024 * 1024;
     public int MaxVersionsPerFile { get; set; } = 20;
+    public bool ResourceThrottlingEnabled { get; set; } = true;
+    public bool PauseBackupOnBattery { get; set; } = true;
+    public int ScanThrottleMilliseconds { get; set; } = 2;
+    public long DailyUploadLimitBytes { get; set; } = 10L * 1024 * 1024 * 1024;
     [Required] public string UpdatedByAdminId { get; set; } = string.Empty;
     public DateTime UpdatedAt { get; set; }
 }

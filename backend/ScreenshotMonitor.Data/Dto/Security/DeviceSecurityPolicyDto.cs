@@ -19,6 +19,10 @@ public record DeviceSecurityPolicyDto(
     int RetentionDays,
     long MaxBackupBytes,
     int MaxVersionsPerFile,
+    bool ResourceThrottlingEnabled,
+    bool PauseBackupOnBattery,
+    int ScanThrottleMilliseconds,
+    long DailyUploadLimitBytes,
     string UpdatedByAdminId,
     DateTime UpdatedAt);
 
@@ -37,7 +41,11 @@ public record UpdateDeviceSecurityPolicyDto(
     bool RetentionEnabled,
     int RetentionDays,
     long MaxBackupBytes,
-    int MaxVersionsPerFile);
+    int MaxVersionsPerFile,
+    bool ResourceThrottlingEnabled,
+    bool PauseBackupOnBattery,
+    int ScanThrottleMilliseconds,
+    long DailyUploadLimitBytes);
 
 public record AdminAuditLogDto(
     string Id, long Sequence, string AdminId, string Action, string TargetType, string TargetId,

@@ -38,6 +38,7 @@ public class DeviceSecurityPolicyServiceTests
 
         Assert.True(policy.MonitoringEnabled); Assert.False(policy.ScreenshotsEnabled); Assert.False(policy.BackupEnabled);
         Assert.True(policy.UsbAuditEnabled); Assert.False(policy.NetworkAuditEnabled);
+        Assert.True(policy.ResourceThrottlingEnabled); Assert.True(policy.PauseBackupOnBattery);
         var audit = Assert.Single(db.AdminAuditLogs);
         Assert.Equal("admin-1", audit.AdminId); Assert.Equal("DEVICE_SECURITY_POLICY_UPDATED", audit.Action);
         Assert.Equal(new string('0', 64), audit.PreviousHash); Assert.Equal(64, audit.EntryHash.Length);
@@ -69,14 +70,30 @@ public class DeviceSecurityPolicyServiceTests
         await using var db = CreateDb(); await SeedAsync(db);
         var service = CreateService(db, TimeProvider.System);
         var invalid = new UpdateDeviceSecurityPolicyDto(true, true, true, true, true, true, true, true, true, true,
-            true, true, 0, 50L * 1024 * 1024 * 1024, 20);
+            true, true, 0, 50L * 1024 * 1024 * 1024, 20, true, true, 2, 10L * 1024 * 1024 * 1024);
         await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync("admin-1", "device-1", invalid));
         Assert.Empty(db.DeviceSecurityPolicies);
         Assert.Empty(db.AdminAuditLogs);
     }
 
     private static UpdateDeviceSecurityPolicyDto Update(bool monitoring = true, bool screenshots = true, bool backup = true, bool usb = true, bool network = true) =>
-        new(monitoring, screenshots, true, true, backup, usb, true, network, true, true, true, false, 90, 50L * 1024 * 1024 * 1024, 20);
+        new(monitoring, screenshots, true, true, backup, usb, true, network, true, true, true, false, 90, 50L * 1024 * 1024 * 1024, 20,
+            true, true, 2, 10L * 1024 * 1024 * 1024);
+
+    [Fact]
+    public async Task Invalid_resource_limits_are_rejected_and_audited_values_are_complete()
+    {
+        await using var db = CreateDb(); await SeedAsync(db);
+        var service = CreateService(db, TimeProvider.System);
+        var invalid = Update() with { ScanThrottleMilliseconds = 1001 };
+        await Assert.ThrowsAsync<ArgumentException>(() => service.UpdateAsync("admin-1", "device-1", invalid));
+        Assert.Empty(db.DeviceSecurityPolicies);
+        var valid = Update() with { ResourceThrottlingEnabled = false, DailyUploadLimitBytes = 1024 * 1024 };
+        await service.UpdateAsync("admin-1", "device-1", valid);
+        var audit = Assert.Single(db.AdminAuditLogs);
+        Assert.Contains("\"ResourceThrottlingEnabled\":false", audit.AfterJson);
+        Assert.Contains("\"DailyUploadLimitBytes\":1048576", audit.AfterJson);
+    }
 
     private static async Task SeedAsync(SmDbContext db)
     {

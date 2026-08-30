@@ -99,6 +99,13 @@ pub fn fixed_drives() -> Vec<String> {
         .collect()
 }
 
+#[cfg(windows)]
+pub fn on_battery() -> bool {
+    use windows_sys::Win32::System::Power::{GetSystemPowerStatus, SYSTEM_POWER_STATUS};
+    let mut status = SYSTEM_POWER_STATUS { ACLineStatus: 255, BatteryFlag: 255, BatteryLifePercent: 255, SystemStatusFlag: 0, BatteryLifeTime: u32::MAX, BatteryFullLifeTime: u32::MAX };
+    unsafe { GetSystemPowerStatus(&mut status) != 0 && status.ACLineStatus == 0 }
+}
+
 #[cfg(not(windows))]
 pub fn removable_drives() -> Vec<String> {
     Vec::new()
@@ -113,3 +120,6 @@ pub fn fixed_drives() -> Vec<String> {
 pub fn idle_seconds() -> u32 {
     0
 }
+
+#[cfg(not(windows))]
+pub fn on_battery() -> bool { false }

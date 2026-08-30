@@ -72,6 +72,10 @@ public class DeviceSecurityPolicyService(SmDbContext db, TimeProvider timeProvid
         policy.RetentionDays = value.RetentionDays;
         policy.MaxBackupBytes = value.MaxBackupBytes;
         policy.MaxVersionsPerFile = value.MaxVersionsPerFile;
+        policy.ResourceThrottlingEnabled = value.ResourceThrottlingEnabled;
+        policy.PauseBackupOnBattery = value.PauseBackupOnBattery;
+        policy.ScanThrottleMilliseconds = value.ScanThrottleMilliseconds;
+        policy.DailyUploadLimitBytes = value.DailyUploadLimitBytes;
     }
 
     private static void Validate(UpdateDeviceSecurityPolicyDto value)
@@ -81,12 +85,18 @@ public class DeviceSecurityPolicyService(SmDbContext db, TimeProvider timeProvid
             throw new ArgumentException("MaxBackupBytes must be between 1 MB and 10 TB.");
         if (value.MaxVersionsPerFile is < 1 or > 1000)
             throw new ArgumentException("MaxVersionsPerFile must be between 1 and 1000.");
+        if (value.ScanThrottleMilliseconds is < 0 or > 1000)
+            throw new ArgumentException("ScanThrottleMilliseconds must be between 0 and 1000.");
+        if (value.DailyUploadLimitBytes is < 1024 * 1024 or > 10L * 1024 * 1024 * 1024 * 1024)
+            throw new ArgumentException("DailyUploadLimitBytes must be between 1 MB and 10 TB.");
     }
 
     internal static string Snapshot(DeviceSecurityPolicy value) => JsonSerializer.Serialize(new {
         value.MonitoringEnabled, value.ScreenshotsEnabled, value.ActiveAppTrackingEnabled, value.IdleTrackingEnabled,
         value.BackupEnabled, value.UsbAuditEnabled, value.UsbFileCopyAuditEnabled, value.NetworkAuditEnabled, value.FileChangeAuditEnabled,
         value.AttendanceRemindersEnabled, value.RestoreEnabled, value.RetentionEnabled,
-        value.RetentionDays, value.MaxBackupBytes, value.MaxVersionsPerFile
+        value.RetentionDays, value.MaxBackupBytes, value.MaxVersionsPerFile,
+        value.ResourceThrottlingEnabled, value.PauseBackupOnBattery,
+        value.ScanThrottleMilliseconds, value.DailyUploadLimitBytes
     });
 }

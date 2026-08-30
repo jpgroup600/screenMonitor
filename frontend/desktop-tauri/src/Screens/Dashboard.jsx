@@ -45,11 +45,11 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (!securityPolicy?.backupEnabled) return undefined;
-    const processQueue = () => runBackupQueueCycle({ native, storage: localStorage }).catch((error) => console.error("Backup queue failed:", error));
+    const processQueue = () => runBackupQueueCycle({ native, storage: localStorage, policy: securityPolicy }).catch((error) => console.error("Backup queue failed:", error));
     const initial = window.setTimeout(processQueue, 10_000);
     const timer = window.setInterval(processQueue, 60_000);
     return () => { window.clearTimeout(initial); window.clearInterval(timer); };
-  }, [securityPolicy?.backupEnabled, securityPolicy?.fileChangeAuditEnabled]);
+  }, [securityPolicy?.backupEnabled, securityPolicy?.resourceThrottlingEnabled, securityPolicy?.pauseBackupOnBattery, securityPolicy?.dailyUploadLimitBytes]);
 
   useEffect(() => {
     if (!securityPolicy?.backupEnabled) return undefined;
@@ -57,7 +57,7 @@ const Dashboard = () => {
     const initial = window.setTimeout(backup, BACKUP_INITIAL_DELAY_MS);
     const timer = window.setInterval(backup, BACKUP_INTERVAL_MS);
     return () => { window.clearTimeout(initial); window.clearInterval(timer); };
-  }, [securityPolicy?.backupEnabled]);
+  }, [securityPolicy?.backupEnabled, securityPolicy?.resourceThrottlingEnabled, securityPolicy?.scanThrottleMilliseconds]);
 
   useEffect(() => {
     if (!securityPolicy?.usbAuditEnabled) return undefined;
