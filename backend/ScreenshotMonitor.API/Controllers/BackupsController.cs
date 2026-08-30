@@ -7,7 +7,7 @@ using ScreenshotMonitor.Data.Services;
 namespace ScreenshotMonitor.API.Controllers;
 
 [ApiController, Authorize(Roles = "Employee,Admin"), Route("api/backups")]
-public class BackupsController(BackupService service, BackupRestoreService restoreService, IBackupObjectStorage storage) : ControllerBase
+public class BackupsController(BackupService service, BackupRestoreService restoreService, BackupInventoryService inventoryService, IBackupObjectStorage storage) : ControllerBase
 {
     private string EmployeeId => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? throw new UnauthorizedAccessException();
 
@@ -73,4 +73,49 @@ public class BackupsController(BackupService service, BackupRestoreService resto
     private static BackupRestoreResponseDto ToRestoreResponse(ScreenshotMonitor.Data.Entities.BackupRestoreRequest value) =>
         new(value.Id, value.FileVersionId, value.EmployeeId, value.DeviceId, value.OriginalPath, value.Status,
             value.RequestedAt, value.CompletedAt, value.ResultPath, value.Error);
+
+    [Authorize(Roles = "Employee,Admin"), HttpPost("inventory/runs")]
+    public async Task<ActionResult<InventoryRunDto>> StartInventory(InventoryStartDto request) =>
+        Ok(ToInventoryRun(await inventoryService.StartAsync(EmployeeId, request.DeviceId)));
+
+    [Authorize(Roles = "Employee,Admin"), HttpPost("inventory/runs/{runId}/files")]
+    public async Task<ActionResult<object>> AddInventoryBatch(string runId, InventoryBatchDto request) =>
+        Ok(new { added = await inventoryService.AddBatchAsync(runId, EmployeeId, request.Files.Select(x => new InventoryEntry(x.Path, x.SizeBytes, x.ModifiedUnixSeconds))) });
+
+    [Authorize(Roles = "Employee,Admin"), HttpPost("inventory/runs/{runId}/complete")]
+    public async Task<IActionResult> CompleteInventory(string runId) =>
+        await inventoryService.CompleteInventoryAsync(runId, EmployeeId) ? NoContent() : NotFound();
+
+    [Authorize(Roles = "Admin"), HttpGet("inventory/runs")]
+    public async Task<ActionResult<IEnumerable<InventoryRunDto>>> InventoryRuns([FromQuery] int take = 50) =>
+        Ok((await inventoryService.ListRunsAsync(take)).Select(ToInventoryRun));
+
+    [Authorize(Roles = "Admin"), HttpGet("inventory/runs/{runId}/progress")]
+    public async Task<ActionResult<InventoryProgressDto>> InventoryProgress(string runId)
+    {
+        var value = await inventoryService.ProgressAsync(runId);
+        return value is null ? NotFound() : Ok(new InventoryProgressDto(value.RunId, value.Status, value.Total, value.Pending, value.BackedUp, value.Failed, value.Excluded));
+    }
+
+    [Authorize(Roles = "Admin"), HttpGet("inventory/runs/{runId}/files")]
+    public async Task<ActionResult<IEnumerable<InventoryItemDto>>> InventoryFiles(string runId, [FromQuery] string? search = null,
+        [FromQuery] string? status = null, [FromQuery] int skip = 0, [FromQuery] int take = 200) =>
+        Ok((await inventoryService.ListItemsAsync(runId, search, status, skip, take)).Select(x =>
+            new InventoryItemDto(x.Id, x.RunId, x.Path, x.SizeBytes, x.ModifiedUnixSeconds, x.Status, x.Error, x.DiscoveredAt, x.BackedUpAt)));
+
+    [Authorize(Roles = "Admin"), HttpGet("inventory/rules")]
+    public async Task<ActionResult<IEnumerable<BackupPathRuleDto>>> InventoryRules([FromQuery] string deviceId) =>
+        Ok((await inventoryService.ListRulesAsync(deviceId)).Select(ToRule));
+
+    [Authorize(Roles = "Admin"), HttpPut("inventory/rules")]
+    public async Task<ActionResult<BackupPathRuleDto>> SetInventoryRule(SetBackupPathRuleDto request)
+    {
+        try { return Ok(ToRule(await inventoryService.SetRuleAsync(request.DeviceId, request.Path, request.Action))); }
+        catch (ArgumentException error) { return BadRequest(new { message = error.Message }); }
+    }
+
+    private static InventoryRunDto ToInventoryRun(ScreenshotMonitor.Data.Entities.BackupInventoryRun value) =>
+        new(value.Id, value.EmployeeId, value.Employee?.FullName ?? "", value.DeviceId, value.Status, value.StartedAt, value.InventoryCompletedAt, value.BackupCompletedAt);
+    private static BackupPathRuleDto ToRule(ScreenshotMonitor.Data.Entities.BackupPathRule value) =>
+        new(value.Id, value.DeviceId, value.Path, value.Action, value.CreatedAt);
 }

@@ -1,0 +1,101 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore;
+using ScreenshotMonitor.Data.Context;
+using ScreenshotMonitor.Data.Entities;
+
+namespace ScreenshotMonitor.Data.Services;
+
+public record InventoryEntry(string Path, long SizeBytes, long? ModifiedUnixSeconds);
+public record InventoryProgress(string RunId, string Status, int Total, int Pending, int BackedUp, int Failed, int Excluded);
+
+public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
+{
+    public async Task<BackupInventoryRun> StartAsync(string employeeId, string deviceId)
+    {
+        if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentException("DeviceId is required.");
+        var run = new BackupInventoryRun { EmployeeId = employeeId, DeviceId = deviceId, StartedAt = timeProvider.GetUtcNow().UtcDateTime };
+        db.BackupInventoryRuns.Add(run); await db.SaveChangesAsync(); return run;
+    }
+
+    public async Task<int> AddBatchAsync(string runId, string employeeId, IEnumerable<InventoryEntry> entries)
+    {
+        var run = await db.BackupInventoryRuns.FirstOrDefaultAsync(x => x.Id == runId && x.EmployeeId == employeeId && x.Status == "Scanning")
+            ?? throw new InvalidOperationException("Active inventory run was not found.");
+        var batch = entries.Take(500).Where(x => !string.IsNullOrWhiteSpace(x.Path) && x.SizeBytes >= 0).ToList();
+        var paths = batch.Select(x => x.Path).ToList();
+        var existing = (await db.BackupInventoryItems.Where(x => x.RunId == runId && paths.Contains(x.Path)).Select(x => x.Path).ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var added = batch.Where(x => existing.Add(x.Path)).Select(x => new BackupInventoryItem {
+            Run = run, Path = x.Path, SizeBytes = x.SizeBytes, ModifiedUnixSeconds = x.ModifiedUnixSeconds, DiscoveredAt = now
+        }).ToList();
+        db.BackupInventoryItems.AddRange(added); await db.SaveChangesAsync(); return added.Count;
+    }
+
+    public async Task<bool> CompleteInventoryAsync(string runId, string employeeId)
+    {
+        var run = await db.BackupInventoryRuns.FirstOrDefaultAsync(x => x.Id == runId && x.EmployeeId == employeeId && x.Status == "Scanning");
+        if (run is null) return false;
+        run.Status = "InventoryReady"; run.InventoryCompletedAt = timeProvider.GetUtcNow().UtcDateTime;
+        await ApplyRulesAsync(run);
+        await db.SaveChangesAsync(); return true;
+    }
+
+    public async Task<BackupPathRule> SetRuleAsync(string deviceId, string path, string action)
+    {
+        if (action is not ("Include" or "Exclude")) throw new ArgumentException("Action must be Include or Exclude.");
+        path = path.Trim().TrimEnd('\\', '/');
+        if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException("Path is required.");
+        var rule = await db.BackupPathRules.FirstOrDefaultAsync(x => x.DeviceId == deviceId && x.Path == path);
+        if (rule is null) { rule = new BackupPathRule { DeviceId = deviceId, Path = path }; db.BackupPathRules.Add(rule); }
+        rule.Action = action; rule.CreatedAt = timeProvider.GetUtcNow().UtcDateTime;
+        await db.SaveChangesAsync(); return rule;
+    }
+
+    public async Task<InventoryProgress?> ProgressAsync(string runId)
+    {
+        var run = await db.BackupInventoryRuns.AsNoTracking().FirstOrDefaultAsync(x => x.Id == runId);
+        if (run is null) return null;
+        var statuses = await db.BackupInventoryItems.Where(x => x.RunId == runId).GroupBy(x => x.Status)
+            .Select(x => new { Status = x.Key, Count = x.Count() }).ToDictionaryAsync(x => x.Status, x => x.Count);
+        int Count(string status) => statuses.GetValueOrDefault(status);
+        return new(run.Id, run.Status, statuses.Values.Sum(), Count("Pending"), Count("BackedUp"), Count("Failed"), Count("Excluded"));
+    }
+
+    public Task<List<BackupInventoryRun>> ListRunsAsync(int take = 50) => db.BackupInventoryRuns.AsNoTracking().Include(x => x.Employee)
+        .OrderByDescending(x => x.StartedAt).Take(Math.Clamp(take, 1, 200)).ToListAsync();
+
+    public async Task<List<BackupInventoryItem>> ListItemsAsync(string runId, string? search, string? status, int skip = 0, int take = 200)
+    {
+        var query = db.BackupInventoryItems.AsNoTracking().Where(x => x.RunId == runId);
+        if (!string.IsNullOrWhiteSpace(search)) { var keyword = search.Trim().ToLower(); query = query.Where(x => x.Path.ToLower().Contains(keyword)); }
+        if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status);
+        return await query.OrderBy(x => x.Path).Skip(Math.Max(skip, 0)).Take(Math.Clamp(take, 1, 500)).ToListAsync();
+    }
+
+    public Task<List<BackupPathRule>> ListRulesAsync(string deviceId) => db.BackupPathRules.AsNoTracking()
+        .Where(x => x.DeviceId == deviceId).OrderByDescending(x => x.Path.Length).ToListAsync();
+
+    private async Task ApplyRulesAsync(BackupInventoryRun run)
+    {
+        var rules = await db.BackupPathRules.Where(x => x.DeviceId == run.DeviceId).ToListAsync();
+        if (rules.Count == 0) return;
+        var items = await db.BackupInventoryItems.Where(x => x.RunId == run.Id).ToListAsync();
+        foreach (var item in items)
+        {
+            var rule = rules.Where(x => IsWithin(item.Path, x.Path)).OrderByDescending(x => x.Path.Length).FirstOrDefault();
+            item.Status = rule?.Action == "Exclude" ? "Excluded" : "Pending";
+        }
+    }
+
+    internal static bool IsWithin(string path, string rulePath)
+    {
+        var normalizedPath = path.Replace('/', '\\').TrimEnd('\\');
+        var normalizedRule = rulePath.Replace('/', '\\').TrimEnd('\\');
+        return normalizedPath.Equals(normalizedRule, StringComparison.OrdinalIgnoreCase)
+            || normalizedPath.StartsWith(normalizedRule + "\\", StringComparison.OrdinalIgnoreCase);
+    }
+}

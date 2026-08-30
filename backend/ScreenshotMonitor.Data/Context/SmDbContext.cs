@@ -104,6 +104,10 @@ namespace ScreenshotMonitor.Data.Context
             modelBuilder.Entity<BackupRestoreRequest>()
                 .HasOne(r => r.FileVersion).WithMany(v => v.RestoreRequests).HasForeignKey(r => r.FileVersionId).OnDelete(DeleteBehavior.Cascade);
             modelBuilder.Entity<BackupRestoreRequest>().HasIndex(r => new { r.EmployeeId, r.DeviceId, r.Status });
+            modelBuilder.Entity<BackupInventoryRun>().HasOne(x => x.Employee).WithMany().HasForeignKey(x => x.EmployeeId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<BackupInventoryItem>().HasOne(x => x.Run).WithMany(x => x.Items).HasForeignKey(x => x.RunId).OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<BackupInventoryItem>().HasIndex(x => new { x.RunId, x.Path }).IsUnique();
+            modelBuilder.Entity<BackupPathRule>().HasIndex(x => new { x.DeviceId, x.Path }).IsUnique();
         }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -143,5 +147,8 @@ namespace ScreenshotMonitor.Data.Context
         public DbSet<BackupFile> BackupFiles { get; set; }
         public DbSet<FileVersion> FileVersions { get; set; }
         public DbSet<BackupRestoreRequest> BackupRestoreRequests { get; set; }
+        public DbSet<BackupInventoryRun> BackupInventoryRuns { get; set; }
+        public DbSet<BackupInventoryItem> BackupInventoryItems { get; set; }
+        public DbSet<BackupPathRule> BackupPathRules { get; set; }
     }
 }
