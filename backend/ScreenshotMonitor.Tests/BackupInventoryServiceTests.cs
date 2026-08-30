@@ -159,6 +159,42 @@ public class BackupInventoryServiceTests
         Assert.NotNull(await db.BackupPathRules.FindAsync(parent.Id));
     }
 
+    [Fact]
+    public async Task Stale_interrupted_scan_is_abandoned_so_the_agent_can_restart_inventory()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 31, 0, 0, 0, TimeSpan.Zero));
+        var service = new BackupInventoryService(db, clock);
+        var stale = await service.StartAsync("employee-1", "device-1");
+        clock.Advance(BackupInventoryService.StaleScanningTimeout + TimeSpan.FromMinutes(1));
+
+        Assert.Null(await service.ActiveRunAsync("employee-1", "device-1"));
+        Assert.Equal("Abandoned", (await db.BackupInventoryRuns.FindAsync(stale.Id))!.Status);
+
+        var restarted = await service.StartAsync("employee-1", "device-1");
+        Assert.Equal(restarted.Id, (await service.ActiveRunAsync("employee-1", "device-1"))!.Id);
+        Assert.Equal("Scanning", restarted.Status);
+    }
+
+    [Fact]
+    public async Task Recent_scan_is_not_abandoned()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 31, 0, 0, 0, TimeSpan.Zero));
+        var service = new BackupInventoryService(db, clock);
+        var recent = await service.StartAsync("employee-1", "device-1");
+        clock.Advance(TimeSpan.FromMinutes(30));
+
+        Assert.Equal(recent.Id, (await service.ActiveRunAsync("employee-1", "device-1"))!.Id);
+        Assert.Equal("Scanning", (await db.BackupInventoryRuns.FindAsync(recent.Id))!.Status);
+    }
+
     private static User Employee() => new() { Id = "employee-1", FullName = "Employee", Email = "e@example.com", PasswordHash = "hash", Role = "Employee", Designation = "", PhoneNumber = "" };
     private static SmDbContext CreateDb() => new(new DbContextOptionsBuilder<SmDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+    private sealed class FakeTimeProvider(DateTimeOffset now) : TimeProvider
+    {
+        private DateTimeOffset current = now;
+        public override DateTimeOffset GetUtcNow() => current;
+        public void Advance(TimeSpan value) => current += value;
+    }
 }

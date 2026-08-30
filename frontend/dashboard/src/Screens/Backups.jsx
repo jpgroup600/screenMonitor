@@ -6,7 +6,7 @@ import { selectedInventoryItems, toggleAllInventorySelection, toggleInventorySel
 import { effectiveFolderRule, folderDisplayName, normalizeFolderSearch, splitExplicitRules } from '../folderPolicy';
 import { canMoveToNextPage, INVENTORY_PAGE_SIZE, pageQuery } from '../pagination';
 
-const statusLabel = { Scanning: '파일 목록 수집 중', InventoryReady: '정책 확인 대기', BackingUp: '백업 진행 중', Completed: '완료', Pending: '대기', BackedUp: '완료', Failed: '실패', Excluded: '제외', Unchanged: '변경 없음' };
+const statusLabel = { Scanning: '파일 목록 수집 중', Abandoned: '중단된 스캔 · 새 스캔으로 복구', InventoryReady: '정책 확인 대기', BackingUp: '백업 진행 중', Completed: '완료', Pending: '대기', BackedUp: '완료', Failed: '실패', Excluded: '제외', Unchanged: '변경 없음' };
 
 export default function Backups() {
   const [runs, setRuns] = useState([]);

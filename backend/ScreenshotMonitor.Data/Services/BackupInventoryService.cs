@@ -14,6 +14,8 @@ public record InventoryFolder(string Path, string Name, string? ParentPath, int 
 
 public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
 {
+    public static readonly TimeSpan StaleScanningTimeout = TimeSpan.FromHours(2);
+
     public async Task<BackupInventoryRun> StartAsync(string employeeId, string deviceId)
     {
         if (string.IsNullOrWhiteSpace(deviceId)) throw new ArgumentException("DeviceId is required.");
@@ -191,9 +193,21 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         return rule;
     }
 
-    public Task<BackupInventoryRun?> ActiveRunAsync(string employeeId, string deviceId) => db.BackupInventoryRuns.AsNoTracking()
-        .Where(x => x.EmployeeId == employeeId && x.DeviceId == deviceId && x.Status != "Completed")
-        .OrderByDescending(x => x.StartedAt).FirstOrDefaultAsync();
+    public async Task<BackupInventoryRun?> ActiveRunAsync(string employeeId, string deviceId)
+    {
+        var cutoff = timeProvider.GetUtcNow().UtcDateTime - StaleScanningTimeout;
+        var stale = await db.BackupInventoryRuns.Where(x => x.EmployeeId == employeeId && x.DeviceId == deviceId
+            && x.Status == "Scanning" && x.StartedAt < cutoff).ToListAsync();
+        if (stale.Count > 0)
+        {
+            foreach (var run in stale) run.Status = "Abandoned";
+            await db.SaveChangesAsync();
+        }
+        return await db.BackupInventoryRuns.AsNoTracking()
+            .Where(x => x.EmployeeId == employeeId && x.DeviceId == deviceId
+                && (x.Status == "Scanning" || x.Status == "InventoryReady" || x.Status == "BackingUp"))
+            .OrderByDescending(x => x.StartedAt).FirstOrDefaultAsync();
+    }
 
     public Task<List<BackupInventoryItem>> PendingItemsAsync(string runId, string employeeId, string deviceId, int take = 3) =>
         db.BackupInventoryItems.AsNoTracking().Where(x => x.RunId == runId && x.Run.EmployeeId == employeeId
