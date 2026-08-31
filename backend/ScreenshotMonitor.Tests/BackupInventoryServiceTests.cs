@@ -231,10 +231,43 @@ public class BackupInventoryServiceTests
         Assert.EndsWith("ready.txt", pending.Path);
         Assert.True(await service.RecordResultAsync(pending.Id, "employee-1", "device-1", true, null));
         Assert.Equal("Scanning", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
-        Assert.NotNull((await db.BackupInventoryRuns.FindAsync(run.Id))!.LastProgressAt);
+        Assert.NotNull((await service.ProgressAsync(run.Id))!.LastBackupActivityAt);
 
         Assert.True(await service.CompleteInventoryAsync(run.Id, "employee-1"));
         Assert.Equal("Completed", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
+    }
+
+    [Fact]
+    public async Task Completed_inventory_can_be_reapplied_after_an_admin_adds_an_include_rule()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        var run = await service.StartAsync("employee-1", "device-1");
+        await service.AddBatchAsync(run.Id, "employee-1", new[] { new InventoryEntry(@"C:\Company\plan.docx", 10, 1) });
+        await service.CompleteInventoryAsync(run.Id, "employee-1");
+        Assert.True(await service.StartBackupAsync(run.Id));
+        Assert.Equal("Completed", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
+
+        await service.SetRuleAsync("device-1", @"C:\Company", "Include");
+        Assert.True(await service.StartBackupAsync(run.Id));
+
+        Assert.Equal("BackingUp", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
+        Assert.Single(await service.PendingItemsAsync(run.Id, "employee-1", "device-1", 10));
+    }
+
+    [Fact]
+    public async Task Folder_file_listing_does_not_include_similarly_named_sibling_folders()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        var run = await service.StartAsync("employee-1", "device-1");
+        await service.AddBatchAsync(run.Id, "employee-1", new[] {
+            new InventoryEntry(@"C:\Work\inside.txt", 1, 1),
+            new InventoryEntry(@"C:\Workspace\outside.txt", 1, 1) });
+
+        var files = await service.ListItemsAsync(run.Id, null, null, folderPath: @"C:\Work");
+
+        Assert.Equal(@"C:\Work\inside.txt", Assert.Single(files).Path);
     }
 
     private static User Employee() => new() { Id = "employee-1", FullName = "Employee", Email = "e@example.com", PasswordHash = "hash", Role = "Employee", Designation = "", PhoneNumber = "" };

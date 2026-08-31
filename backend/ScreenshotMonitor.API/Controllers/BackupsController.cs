@@ -129,13 +129,14 @@ public class BackupsController(BackupService service, BackupRestoreService resto
     {
         var value = await inventoryService.ProgressAsync(runId);
         return value is null ? NotFound() : Ok(new InventoryProgressDto(value.RunId, value.Status, value.Total, value.Pending, value.BackedUp, value.Failed, value.Excluded, value.Unchanged,
-            value.BackupRequested, value.DiscoveredFiles, value.DiscoveredBytes, value.SkippedEntries, value.InaccessibleEntries, value.CurrentPath, value.LastProgressAt));
+            value.BackupRequested, value.DiscoveredFiles, value.DiscoveredBytes, value.SkippedEntries, value.InaccessibleEntries, value.CurrentPath,
+            value.LastProgressAt, value.LastBackupActivityAt));
     }
 
     [Authorize(Roles = "Admin"), HttpGet("inventory/runs/{runId}/files")]
     public async Task<ActionResult<IEnumerable<InventoryItemDto>>> InventoryFiles(string runId, [FromQuery] string? search = null,
-        [FromQuery] string? status = null, [FromQuery] int skip = 0, [FromQuery] int take = 200) =>
-        Ok((await inventoryService.ListItemsAsync(runId, search, status, skip, take)).Select(x =>
+        [FromQuery] string? status = null, [FromQuery] int skip = 0, [FromQuery] int take = 200, [FromQuery] string? folderPath = null) =>
+        Ok((await inventoryService.ListItemsAsync(runId, search, status, skip, take, folderPath)).Select(x =>
             new InventoryItemDto(x.Id, x.RunId, x.Path, x.SizeBytes, x.ModifiedUnixSeconds, x.Status, x.Error, x.DiscoveredAt, x.BackedUpAt)));
 
     [Authorize(Roles = "Admin"), HttpGet("inventory/runs/{runId}/folders")]

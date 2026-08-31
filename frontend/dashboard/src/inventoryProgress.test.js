@@ -4,7 +4,8 @@ import { canStartInventoryBackup, inventoryBackupButtonLabel, inventoryBackupPer
 
 test('backup can start before inventory scan completes', () => {
   assert.equal(canStartInventoryBackup({ status: 'Scanning', backupRequested: false }), true);
-  assert.equal(canStartInventoryBackup({ status: 'Scanning', backupRequested: true }), false);
+  assert.equal(canStartInventoryBackup({ status: 'Scanning', backupRequested: true }), true);
+  assert.equal(canStartInventoryBackup({ status: 'Completed', backupRequested: true }), true);
   assert.equal(inventoryBackupButtonLabel({ status: 'Scanning', backupRequested: false }), '발견 파일 백업 시작');
 });
 

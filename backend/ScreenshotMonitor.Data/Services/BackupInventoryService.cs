@@ -10,7 +10,8 @@ namespace ScreenshotMonitor.Data.Services;
 
 public record InventoryEntry(string Path, long SizeBytes, long? ModifiedUnixSeconds, bool RequiresBackup = true);
 public record InventoryProgress(string RunId, string Status, int Total, int Pending, int BackedUp, int Failed, int Excluded, int Unchanged,
-    bool BackupRequested, long DiscoveredFiles, long DiscoveredBytes, long SkippedEntries, long InaccessibleEntries, string CurrentPath, DateTime? LastProgressAt);
+    bool BackupRequested, long DiscoveredFiles, long DiscoveredBytes, long SkippedEntries, long InaccessibleEntries, string CurrentPath,
+    DateTime? LastProgressAt, DateTime? LastBackupActivityAt);
 public record InventoryFolder(string Path, string Name, string? ParentPath, int Depth, int FileCount, long SizeBytes, int Pending, int BackedUp, int Failed, int Excluded, int Unchanged);
 
 public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
@@ -97,10 +98,11 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
 
     public async Task<bool> StartBackupAsync(string runId)
     {
-        var run = await db.BackupInventoryRuns.FirstOrDefaultAsync(x => x.Id == runId && (x.Status == "Scanning" || x.Status == "InventoryReady"));
+        var run = await db.BackupInventoryRuns.FirstOrDefaultAsync(x => x.Id == runId && x.Status != "Abandoned");
         if (run is null) return false;
         run.BackupRequested = true;
         await ApplyRulesAsync(run);
+        await db.SaveChangesAsync();
         if (run.Status == "Scanning") { await db.SaveChangesAsync(); return true; }
         if (await db.BackupInventoryItems.AnyAsync(x => x.RunId == runId && x.Status == "Pending")) run.Status = "BackingUp";
         else { run.Status = "Completed"; run.BackupCompletedAt = timeProvider.GetUtcNow().UtcDateTime; }
@@ -128,16 +130,25 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         var statuses = await db.BackupInventoryItems.Where(x => x.RunId == runId).GroupBy(x => x.Status)
             .Select(x => new { Status = x.Key, Count = x.Count() }).ToDictionaryAsync(x => x.Status, x => x.Count);
         int Count(string status) => statuses.GetValueOrDefault(status);
+        var lastBackupActivityAt = await db.BackupInventoryItems.Where(x => x.RunId == runId && x.BackedUpAt != null)
+            .MaxAsync(x => (DateTime?)x.BackedUpAt);
         return new(run.Id, run.Status, statuses.Values.Sum(), Count("Pending"), Count("BackedUp"), Count("Failed"), Count("Excluded"), Count("Unchanged"),
-            run.BackupRequested, run.DiscoveredFiles, run.DiscoveredBytes, run.SkippedEntries, run.InaccessibleEntries, run.CurrentPath, run.LastProgressAt);
+            run.BackupRequested, run.DiscoveredFiles, run.DiscoveredBytes, run.SkippedEntries, run.InaccessibleEntries, run.CurrentPath,
+            run.LastProgressAt, lastBackupActivityAt);
     }
 
     public Task<List<BackupInventoryRun>> ListRunsAsync(int take = 50) => db.BackupInventoryRuns.AsNoTracking().Include(x => x.Employee)
         .OrderByDescending(x => x.StartedAt).Take(Math.Clamp(take, 1, 200)).ToListAsync();
 
-    public async Task<List<BackupInventoryItem>> ListItemsAsync(string runId, string? search, string? status, int skip = 0, int take = 200)
+    public async Task<List<BackupInventoryItem>> ListItemsAsync(string runId, string? search, string? status, int skip = 0, int take = 200, string? folderPath = null)
     {
         var query = db.BackupInventoryItems.AsNoTracking().Where(x => x.RunId == runId);
+        if (!string.IsNullOrWhiteSpace(folderPath))
+        {
+            var folder = folderPath.Trim().TrimEnd('\\', '/').Replace('/', '\\');
+            var prefix = folder + "\\";
+            query = query.Where(x => x.Path == folder || x.Path.StartsWith(prefix));
+        }
         if (!string.IsNullOrWhiteSpace(search)) { var keyword = search.Trim().ToLower(); query = query.Where(x => x.Path.ToLower().Contains(keyword)); }
         if (!string.IsNullOrWhiteSpace(status)) query = query.Where(x => x.Status == status);
         return await query.OrderBy(x => x.Path).Skip(Math.Max(skip, 0)).Take(Math.Clamp(take, 1, 500)).ToListAsync();
@@ -249,7 +260,6 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         if (item is null) return false;
         item.Status = succeeded ? "BackedUp" : "Failed"; item.Error = succeeded ? null : error;
         item.BackedUpAt = succeeded ? timeProvider.GetUtcNow().UtcDateTime : null;
-        item.Run.LastProgressAt = timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync();
         if (item.Run.Status != "Scanning" && !await db.BackupInventoryItems.AnyAsync(x => x.RunId == item.RunId && x.Status == "Pending"))
         {

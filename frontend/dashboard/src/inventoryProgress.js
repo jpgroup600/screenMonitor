@@ -7,14 +7,13 @@ export function inventoryHeartbeat(lastProgressAt, now = Date.now()) {
 }
 
 export function canStartInventoryBackup(progress) {
-  return Boolean(progress && ['Scanning', 'InventoryReady'].includes(progress.status) && !progress.backupRequested);
+  return Boolean(progress && ['Scanning', 'InventoryReady', 'BackingUp', 'Completed'].includes(progress.status));
 }
 
 export function inventoryBackupButtonLabel(progress) {
-  if (progress?.backupRequested && progress.status === 'Scanning') return '스캔·백업 진행 중';
-  if (progress?.status === 'Scanning') return '발견 파일 백업 시작';
-  if (progress?.status === 'BackingUp') return '백업 진행 중';
-  if (progress?.status === 'Completed') return '백업 완료';
+  if (progress?.status === 'Scanning') return progress.backupRequested ? '백업 대상 다시 적용' : '발견 파일 백업 시작';
+  if (progress?.status === 'BackingUp') return '백업 대상 다시 적용';
+  if (progress?.status === 'Completed') return '포함 목록 백업 시작';
   return '백업 시작';
 }
 
