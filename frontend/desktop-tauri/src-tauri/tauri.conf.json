@@ -16,6 +16,7 @@
   "bundle": {
     "active": true,
     "targets": "nsis",
+    "createUpdaterArtifacts": true,
     "icon": [],
     "externalBin": ["binaries/screen-monitor-agent"],
     "windows": {
@@ -23,6 +24,13 @@
         "installMode": "perMachine",
         "installerHooks": "installer-hooks.nsh"
       }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDc3NDg2RjEwQ0NCMDgwODMKUldTRGdMRE1FRzlJZDZZWVVkZmw5bjVhSkF5OGNkUHh1YTFnWmh3SmEvUXRKZDZPNUR4Z1RSUncK",
+      "endpoints": ["https://api-production-18d6.up.railway.app/api/desktop-updates/latest.json"],
+      "windows": { "installMode": "passive" }
     }
   }
 }

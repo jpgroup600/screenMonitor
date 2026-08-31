@@ -6,3 +6,4 @@
 !frontend/desktop-tauri/src-tauri/src/bin/*.rs
 **/obj/
 frontend/desktop-tauri/src-tauri/binaries/*.exe
+frontend/desktop-tauri/.tauri/

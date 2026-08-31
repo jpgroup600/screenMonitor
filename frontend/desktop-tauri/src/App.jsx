@@ -7,6 +7,7 @@ import SessionStarted from './Screens/SessionStarted';
 import CustomTitleBar from './Components/CustomTitleBar';
 import { native } from './native';
 import { initializeAuthToken } from './authToken';
+import { installAvailableUpdate } from './autoUpdate';
 
 const App = () => {
   const [token, setToken] = useState(null);
@@ -15,6 +16,12 @@ const App = () => {
   const [loading, setLoading] = useState(true);
 
   const hubURL = import.meta.env.VITE_HUB_URL;
+
+  useEffect(() => {
+    if (import.meta.env.PROD) {
+      installAvailableUpdate().catch((error) => console.error('Automatic update failed:', error));
+    }
+  }, []);
 
   useEffect(() => {
     initializeAuthToken({ native, storage: localStorage })
