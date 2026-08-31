@@ -43,6 +43,8 @@ pub struct RestoreRequest {
 pub struct InventoryRun {
     pub id: String,
     pub status: String,
+    #[serde(default)]
+    pub backup_requested: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -67,6 +69,16 @@ pub struct InventoryFile<'a> {
 #[serde(rename_all = "camelCase")]
 struct InventoryBatch<'a> {
     files: &'a [InventoryFile<'a>],
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct InventoryProgress<'a> {
+    discovered_files: u64,
+    discovered_bytes: u64,
+    skipped_entries: u64,
+    inaccessible_entries: u64,
+    current_path: &'a str,
 }
 
 #[derive(Serialize)]
@@ -324,6 +336,33 @@ impl ApiClient {
                 self.base_url
             ))
             .bearer_auth(&self.token)
+            .send()
+            .await
+            .map_err(|e| e.to_string())?
+            .error_for_status()
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub async fn update_inventory_progress(
+        &self,
+        run_id: &str,
+        progress: &crate::backup_inventory::ScanProgress,
+    ) -> Result<(), String> {
+        let current_path = progress.current_path.to_string_lossy().to_string();
+        self.client
+            .put(format!(
+                "{}/backups/inventory/runs/{run_id}/progress",
+                self.base_url
+            ))
+            .bearer_auth(&self.token)
+            .json(&InventoryProgress {
+                discovered_files: progress.discovered_files,
+                discovered_bytes: progress.discovered_bytes,
+                skipped_entries: progress.skipped_entries,
+                inaccessible_entries: progress.inaccessible_entries,
+                current_path: &current_path,
+            })
             .send()
             .await
             .map_err(|e| e.to_string())?

@@ -189,6 +189,48 @@ public class BackupInventoryServiceTests
         Assert.Equal("Scanning", (await db.BackupInventoryRuns.FindAsync(recent.Id))!.Status);
     }
 
+    [Fact]
+    public async Task Progress_heartbeat_is_monotonic_and_keeps_a_long_scan_active()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 31, 0, 0, 0, TimeSpan.Zero));
+        var service = new BackupInventoryService(db, clock);
+        var run = await service.StartAsync("employee-1", "device-1");
+        clock.Advance(TimeSpan.FromHours(1) + TimeSpan.FromMinutes(50));
+        Assert.True(await service.UpdateProgressAsync(run.Id, "employee-1", 50, 500, 3, 1, @"C:\Work"));
+        clock.Advance(TimeSpan.FromMinutes(20));
+        Assert.True(await service.UpdateProgressAsync(run.Id, "employee-1", 40, 400, 2, 0, @"C:\Work\next"));
+
+        var active = await service.ActiveRunAsync("employee-1", "device-1");
+        var progress = await service.ProgressAsync(run.Id);
+        Assert.Equal(run.Id, active!.Id);
+        Assert.Equal(50, progress!.DiscoveredFiles);
+        Assert.Equal(500, progress.DiscoveredBytes);
+        Assert.Equal(@"C:\Work\next", progress.CurrentPath);
+    }
+
+    [Fact]
+    public async Task Backup_can_be_requested_and_processed_while_scan_continues()
+    {
+        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        await service.SetRuleAsync("device-1", @"C:\Private", "Exclude");
+        var run = await service.StartAsync("employee-1", "device-1");
+        Assert.True(await service.StartBackupAsync(run.Id));
+        Assert.Equal("Scanning", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
+        await service.AddBatchAsync(run.Id, "employee-1", new[] {
+            new InventoryEntry(@"C:\Work\ready.txt", 1, 1),
+            new InventoryEntry(@"C:\Private\secret.txt", 2, 2) });
+
+        var pending = Assert.Single(await service.PendingItemsAsync(run.Id, "employee-1", "device-1", 10));
+        Assert.EndsWith("ready.txt", pending.Path);
+        Assert.True(await service.RecordResultAsync(pending.Id, "employee-1", "device-1", true, null));
+        Assert.Equal("Scanning", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
+
+        Assert.True(await service.CompleteInventoryAsync(run.Id, "employee-1"));
+        Assert.Equal("Completed", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
+    }
+
     private static User Employee() => new() { Id = "employee-1", FullName = "Employee", Email = "e@example.com", PasswordHash = "hash", Role = "Employee", Designation = "", PhoneNumber = "" };
     private static SmDbContext CreateDb() => new(new DbContextOptionsBuilder<SmDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
     private sealed class FakeTimeProvider(DateTimeOffset now) : TimeProvider

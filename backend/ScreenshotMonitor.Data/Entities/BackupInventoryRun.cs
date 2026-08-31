@@ -15,5 +15,12 @@ public class BackupInventoryRun
     public DateTime StartedAt { get; set; }
     public DateTime? InventoryCompletedAt { get; set; }
     public DateTime? BackupCompletedAt { get; set; }
+    public bool BackupRequested { get; set; }
+    public long DiscoveredFiles { get; set; }
+    public long DiscoveredBytes { get; set; }
+    public long SkippedEntries { get; set; }
+    public long InaccessibleEntries { get; set; }
+    [MaxLength(2048)] public string CurrentPath { get; set; } = string.Empty;
+    public DateTime? LastProgressAt { get; set; }
     public ICollection<BackupInventoryItem> Items { get; set; } = new List<BackupInventoryItem>();
 }

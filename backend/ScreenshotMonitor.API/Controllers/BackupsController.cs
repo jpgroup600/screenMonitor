@@ -91,6 +91,11 @@ public class BackupsController(BackupService service, BackupRestoreService resto
     public async Task<IActionResult> CompleteInventory(string runId) =>
         await inventoryService.CompleteInventoryAsync(runId, EmployeeId) ? NoContent() : NotFound();
 
+    [Authorize(Roles = "Employee,Admin"), HttpPut("inventory/runs/{runId}/progress")]
+    public async Task<IActionResult> UpdateInventoryProgress(string runId, InventoryProgressUpdateDto value) =>
+        await inventoryService.UpdateProgressAsync(runId, EmployeeId, value.DiscoveredFiles, value.DiscoveredBytes,
+            value.SkippedEntries, value.InaccessibleEntries, value.CurrentPath) ? NoContent() : NotFound();
+
     [Authorize(Roles = "Employee,Admin"), HttpGet("inventory/device/{deviceId}/active")]
     public async Task<ActionResult<InventoryRunDto>> ActiveInventory(string deviceId)
     {
@@ -115,7 +120,7 @@ public class BackupsController(BackupService service, BackupRestoreService resto
     public async Task<IActionResult> StartInventoryBackup(string runId)
     {
         if (!await inventoryService.StartBackupAsync(runId)) return NotFound();
-        await audit.AppendAndSaveAsync(EmployeeId, "INVENTORY_BACKUP_STARTED", "BackupInventoryRun", runId, null, new { Status = "BackingUp" });
+        await audit.AppendAndSaveAsync(EmployeeId, "INVENTORY_BACKUP_STARTED", "BackupInventoryRun", runId, null, new { BackupRequested = true });
         return NoContent();
     }
 
@@ -123,7 +128,8 @@ public class BackupsController(BackupService service, BackupRestoreService resto
     public async Task<ActionResult<InventoryProgressDto>> InventoryProgress(string runId)
     {
         var value = await inventoryService.ProgressAsync(runId);
-        return value is null ? NotFound() : Ok(new InventoryProgressDto(value.RunId, value.Status, value.Total, value.Pending, value.BackedUp, value.Failed, value.Excluded, value.Unchanged));
+        return value is null ? NotFound() : Ok(new InventoryProgressDto(value.RunId, value.Status, value.Total, value.Pending, value.BackedUp, value.Failed, value.Excluded, value.Unchanged,
+            value.BackupRequested, value.DiscoveredFiles, value.DiscoveredBytes, value.SkippedEntries, value.InaccessibleEntries, value.CurrentPath, value.LastProgressAt));
     }
 
     [Authorize(Roles = "Admin"), HttpGet("inventory/runs/{runId}/files")]
@@ -177,7 +183,8 @@ public class BackupsController(BackupService service, BackupRestoreService resto
     }
 
     private static InventoryRunDto ToInventoryRun(ScreenshotMonitor.Data.Entities.BackupInventoryRun value) =>
-        new(value.Id, value.EmployeeId, value.Employee?.FullName ?? "", value.DeviceId, value.Status, value.StartedAt, value.InventoryCompletedAt, value.BackupCompletedAt);
+        new(value.Id, value.EmployeeId, value.Employee?.FullName ?? "", value.DeviceId, value.Status, value.StartedAt, value.InventoryCompletedAt, value.BackupCompletedAt,
+            value.BackupRequested, value.DiscoveredFiles, value.DiscoveredBytes, value.SkippedEntries, value.InaccessibleEntries, value.CurrentPath, value.LastProgressAt);
     private static BackupPathRuleDto ToRule(ScreenshotMonitor.Data.Entities.BackupPathRule value) =>
         new(value.Id, value.DeviceId, value.Path, value.Action, value.CreatedAt);
 }

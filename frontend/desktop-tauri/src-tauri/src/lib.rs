@@ -423,40 +423,80 @@ async fn run_incremental_backup(
             inaccessible_entries: 0,
         });
     }
-    let service_backups = state.service_backups.clone();
-    let inventory = tauri::async_runtime::spawn_blocking(move || {
+    let inventory_run = client.start_inventory(&device_id).await?;
+    let manifest = backup_manifest::BackupManifest::load(&state.backup_manifest_path)?;
+    let scan_manifest = manifest.clone();
+    let scan_roots = roots.clone();
+    let (scan_tx, mut scan_rx) = tokio::sync::mpsc::channel(4);
+    let scan_worker = tauri::async_runtime::spawn_blocking(move || {
         let policy = backup_policy::BackupPolicy::default();
-        let mut inventory = backup_inventory::InventoryResult::default();
-        for root in roots {
-            let partial = backup_inventory::scan_throttled(
-                std::path::Path::new(&root),
-                &policy,
-                Duration::from_millis(scan_throttle_milliseconds.min(1000)),
-            );
-            inventory.files.extend(partial.files);
-            inventory.skipped_entries += partial.skipped_entries;
-            inventory.inaccessible_entries += partial.inaccessible_entries;
-        }
-        if let Ok(service_files) = service_backups.inventory_files() {
-            let existing = inventory
-                .files
-                .iter()
-                .map(|file| file.path.clone())
+        backup_inventory::scan_streaming(
+            &scan_roots,
+            &policy,
+            Duration::from_millis(scan_throttle_milliseconds.min(1000)),
+            250,
+            |batch, progress| {
+                scan_tx
+                    .blocking_send((batch, progress))
+                    .map_err(|error| error.to_string())
+            },
+        )
+    });
+    while let Some((batch, progress)) = scan_rx.recv().await {
+        let changed = scan_manifest
+            .changed_files(&batch)
+            .into_iter()
+            .collect::<std::collections::HashSet<_>>();
+        let files = batch
+            .iter()
+            .map(|file| api::InventoryFile {
+                path: file.path.to_str().unwrap_or_default(),
+                size_bytes: file.size_bytes,
+                modified_unix_seconds: file.modified_unix_seconds,
+                requires_backup: changed.contains(&file.path),
+            })
+            .collect::<Vec<_>>();
+        client
+            .add_inventory_batch(&inventory_run.id, &files)
+            .await?;
+        client
+            .update_inventory_progress(&inventory_run.id, &progress)
+            .await?;
+    }
+    let mut inventory = scan_worker.await.map_err(|error| error.to_string())??;
+    if let Ok(service_files) = state.service_backups.inventory_files() {
+        let existing = inventory
+            .files
+            .iter()
+            .map(|file| file.path.clone())
+            .collect::<std::collections::HashSet<_>>();
+        let additions = service_files
+            .into_iter()
+            .filter(|file| !existing.contains(&file.path))
+            .collect::<Vec<_>>();
+        for batch in additions.chunks(250) {
+            let changed = manifest
+                .changed_files(batch)
+                .into_iter()
                 .collect::<std::collections::HashSet<_>>();
-            inventory.files.extend(
-                service_files
-                    .into_iter()
-                    .filter(|file| !existing.contains(&file.path)),
-            );
+            let files = batch
+                .iter()
+                .map(|file| api::InventoryFile {
+                    path: file.path.to_str().unwrap_or_default(),
+                    size_bytes: file.size_bytes,
+                    modified_unix_seconds: file.modified_unix_seconds,
+                    requires_backup: changed.contains(&file.path),
+                })
+                .collect::<Vec<_>>();
+            client
+                .add_inventory_batch(&inventory_run.id, &files)
+                .await?;
         }
+        inventory.files.extend(additions);
         inventory
             .files
             .sort_by(|left, right| left.path.cmp(&right.path));
-        inventory
-    })
-    .await
-    .map_err(|error| error.to_string())?;
-    let manifest = backup_manifest::BackupManifest::load(&state.backup_manifest_path)?;
+    }
     let changed = manifest
         .changed_files(&inventory.files)
         .into_iter()
@@ -486,21 +526,6 @@ async fn run_incremental_backup(
             }
         }
         next_manifest.save(&state.backup_manifest_path)?;
-    }
-    let inventory_run = client.start_inventory(&device_id).await?;
-    for batch in inventory.files.chunks(500) {
-        let files = batch
-            .iter()
-            .map(|file| api::InventoryFile {
-                path: file.path.to_str().unwrap_or_default(),
-                size_bytes: file.size_bytes,
-                modified_unix_seconds: file.modified_unix_seconds,
-                requires_backup: changed.contains(&file.path),
-            })
-            .collect::<Vec<_>>();
-        client
-            .add_inventory_batch(&inventory_run.id, &files)
-            .await?;
     }
     client.complete_inventory(&inventory_run.id).await?;
     return Ok(IncrementalBackupResult {
@@ -723,7 +748,7 @@ async fn process_inventory_backup(
             inaccessible_entries: 0,
         });
     };
-    if run.status != "BackingUp" {
+    if !run.backup_requested && run.status != "BackingUp" {
         return Ok(IncrementalBackupResult {
             scanned_files: 0,
             changed_files: 0,
@@ -1016,6 +1041,8 @@ pub fn run() {
                 .build(),
         )
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             start_monitoring,
             start_attendance_monitoring,
@@ -1058,7 +1085,9 @@ pub fn run() {
             let show = MenuItem::with_id(app, "show", "출퇴근 관리 열기", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "프로그램 종료", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&status, &show, &quit])?;
+            let tray_icon = tauri::image::Image::from_bytes(include_bytes!("../icons/32x32.png"))?;
             TrayIconBuilder::new()
+                .icon(tray_icon)
                 .menu(&menu)
                 .tooltip("출퇴근 관리 프로그램 · 에이전트 실행 중")
                 .on_menu_event(|app, event| match event.id.as_ref() {

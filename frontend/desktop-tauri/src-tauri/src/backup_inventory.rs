@@ -20,6 +20,15 @@ pub struct InventoryResult {
     pub inaccessible_entries: u64,
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ScanProgress {
+    pub discovered_files: u64,
+    pub discovered_bytes: u64,
+    pub skipped_entries: u64,
+    pub inaccessible_entries: u64,
+    pub current_path: PathBuf,
+}
+
 pub fn scan(root: &Path, policy: &BackupPolicy) -> InventoryResult {
     scan_throttled(root, policy, Duration::ZERO)
 }
@@ -35,6 +44,130 @@ pub fn scan_throttled(
         .files
         .sort_by(|left, right| left.path.cmp(&right.path));
     result
+}
+
+pub fn scan_streaming<F>(
+    roots: &[String],
+    policy: &BackupPolicy,
+    delay_per_entry: Duration,
+    batch_size: usize,
+    mut on_batch: F,
+) -> Result<InventoryResult, String>
+where
+    F: FnMut(Vec<InventoryFile>, ScanProgress) -> Result<(), String>,
+{
+    let mut result = InventoryResult::default();
+    let mut pending = Vec::new();
+    let mut progress = ScanProgress::default();
+    for root in roots {
+        scan_directory_streaming(
+            Path::new(root),
+            policy,
+            delay_per_entry,
+            batch_size.max(1),
+            &mut result,
+            &mut pending,
+            &mut progress,
+            &mut on_batch,
+        )?;
+    }
+    on_batch(std::mem::take(&mut pending), progress.clone())?;
+    result
+        .files
+        .sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(result)
+}
+
+fn scan_directory_streaming<F>(
+    directory: &Path,
+    policy: &BackupPolicy,
+    delay_per_entry: Duration,
+    batch_size: usize,
+    result: &mut InventoryResult,
+    pending: &mut Vec<InventoryFile>,
+    progress: &mut ScanProgress,
+    on_batch: &mut F,
+) -> Result<(), String>
+where
+    F: FnMut(Vec<InventoryFile>, ScanProgress) -> Result<(), String>,
+{
+    progress.current_path = directory.to_path_buf();
+    if !policy.should_include(directory, None) {
+        result.skipped_entries += 1;
+        progress.skipped_entries += 1;
+        return Ok(());
+    }
+    let entries = match fs::read_dir(directory) {
+        Ok(entries) => entries,
+        Err(_) => {
+            result.inaccessible_entries += 1;
+            progress.inaccessible_entries += 1;
+            return Ok(());
+        }
+    };
+    for entry in entries {
+        if !delay_per_entry.is_zero() {
+            std::thread::sleep(delay_per_entry);
+        }
+        let entry = match entry {
+            Ok(value) => value,
+            Err(_) => {
+                result.inaccessible_entries += 1;
+                progress.inaccessible_entries += 1;
+                continue;
+            }
+        };
+        let path = entry.path();
+        progress.current_path = path.clone();
+        let metadata = match fs::symlink_metadata(&path) {
+            Ok(value) => value,
+            Err(_) => {
+                result.inaccessible_entries += 1;
+                progress.inaccessible_entries += 1;
+                continue;
+            }
+        };
+        if metadata.file_type().is_symlink() {
+            result.skipped_entries += 1;
+            progress.skipped_entries += 1;
+            continue;
+        }
+        if metadata.is_dir() {
+            scan_directory_streaming(
+                &path,
+                policy,
+                delay_per_entry,
+                batch_size,
+                result,
+                pending,
+                progress,
+                on_batch,
+            )?;
+            continue;
+        }
+        if !metadata.is_file() || !policy.should_include(&path, Some(metadata.len())) {
+            result.skipped_entries += 1;
+            progress.skipped_entries += 1;
+            continue;
+        }
+        let file = InventoryFile {
+            path,
+            size_bytes: metadata.len(),
+            modified_unix_seconds: metadata
+                .modified()
+                .ok()
+                .and_then(|value| value.duration_since(UNIX_EPOCH).ok())
+                .map(|value| value.as_secs()),
+        };
+        progress.discovered_files += 1;
+        progress.discovered_bytes += file.size_bytes;
+        result.files.push(file.clone());
+        pending.push(file);
+        if pending.len() >= batch_size {
+            on_batch(std::mem::take(pending), progress.clone())?;
+        }
+    }
+    Ok(())
 }
 
 fn scan_directory(
@@ -128,6 +261,37 @@ mod tests {
         assert!(result.files[0].path.ends_with("report.txt"));
         assert_eq!(result.files[0].size_bytes, 6);
         assert_eq!(result.skipped_entries, 1);
+    }
+
+    #[test]
+    fn streaming_scan_emits_bounded_batches_and_cumulative_progress() {
+        let directory = tempfile::Builder::new()
+            .prefix("inventory-stream-")
+            .tempdir_in(".")
+            .unwrap();
+        fs::write(directory.path().join("one.txt"), b"1").unwrap();
+        fs::write(directory.path().join("two.txt"), b"22").unwrap();
+        fs::write(directory.path().join("three.txt"), b"333").unwrap();
+        let roots = vec![directory.path().to_string_lossy().to_string()];
+        let mut updates = Vec::new();
+
+        let result = scan_streaming(
+            &roots,
+            &BackupPolicy::default(),
+            Duration::ZERO,
+            2,
+            |batch, progress| {
+                updates.push((batch.len(), progress));
+                Ok(())
+            },
+        )
+        .unwrap();
+
+        assert_eq!(result.files.len(), 3);
+        assert_eq!(updates.iter().map(|update| update.0).sum::<usize>(), 3);
+        assert!(updates.iter().all(|update| update.0 <= 2));
+        assert_eq!(updates.last().unwrap().1.discovered_files, 3);
+        assert_eq!(updates.last().unwrap().1.discovered_bytes, 6);
     }
 
     #[cfg(windows)]
