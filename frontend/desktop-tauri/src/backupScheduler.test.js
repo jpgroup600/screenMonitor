@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { BACKUP_INTERVAL_MS, runBackupCycle, runBackupQueueCycle } from "./backupScheduler";
+import { BACKUP_INTERVAL_MS, BACKUP_QUEUE_INTERVAL_MS, runBackupCycle, runBackupQueueCycle } from "./backupScheduler";
 
 describe("backup scheduler", () => {
   it("backs up all fixed drives with the authenticated device", async () => {
@@ -21,5 +21,6 @@ describe("backup scheduler", () => {
     const storage = { getItem: vi.fn((key) => ({ token: "token-1", screenMonitorDeviceId: "device-1" })[key]) };
     await runBackupQueueCycle({ native, storage, policy: { resourceThrottlingEnabled: true, pauseBackupOnBattery: true, pauseBackupOnMeteredNetwork: true, dailyUploadLimitBytes: 123 } });
     expect(native.processInventoryBackup).toHaveBeenCalledWith("token-1", "device-1", { resourceThrottlingEnabled: true, pauseBackupOnBattery: true, pauseBackupOnMeteredNetwork: true, dailyUploadLimitBytes: 123 });
+    expect(BACKUP_QUEUE_INTERVAL_MS).toBe(15_000);
   });
 });

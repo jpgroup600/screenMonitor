@@ -1,5 +1,6 @@
 export const BACKUP_INTERVAL_MS = 6 * 60 * 60 * 1000;
 export const BACKUP_INITIAL_DELAY_MS = 60 * 1000;
+export const BACKUP_QUEUE_INTERVAL_MS = 15 * 1000;
 
 export async function runBackupCycle({ native, storage, policy }) {
   const token = await native.loadAuthToken();

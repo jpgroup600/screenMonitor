@@ -249,6 +249,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         if (item is null) return false;
         item.Status = succeeded ? "BackedUp" : "Failed"; item.Error = succeeded ? null : error;
         item.BackedUpAt = succeeded ? timeProvider.GetUtcNow().UtcDateTime : null;
+        item.Run.LastProgressAt = timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync();
         if (item.Run.Status != "Scanning" && !await db.BackupInventoryItems.AnyAsync(x => x.RunId == item.RunId && x.Status == "Pending"))
         {

@@ -758,7 +758,7 @@ async fn process_inventory_backup(
             inaccessible_entries: 0,
         });
     }
-    let items = client.pending_inventory(&run.id, &device_id, 3).await?;
+    let items = client.pending_inventory(&run.id, &device_id, 10).await?;
     let mut uploaded = 0;
     let mut failed = 0;
     for item in items {

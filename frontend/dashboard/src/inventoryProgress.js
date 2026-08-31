@@ -17,3 +17,9 @@ export function inventoryBackupButtonLabel(progress) {
   if (progress?.status === 'Completed') return '백업 완료';
   return '백업 시작';
 }
+
+export function inventoryBackupPercent(progress) {
+  const eligible = Number(progress?.pending || 0) + Number(progress?.backedUp || 0) + Number(progress?.failed || 0);
+  if (eligible <= 0) return 0;
+  return Math.min(100, Math.round((Number(progress?.backedUp || 0) / eligible) * 100));
+}

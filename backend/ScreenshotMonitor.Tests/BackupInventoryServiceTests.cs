@@ -226,6 +226,7 @@ public class BackupInventoryServiceTests
         Assert.EndsWith("ready.txt", pending.Path);
         Assert.True(await service.RecordResultAsync(pending.Id, "employee-1", "device-1", true, null));
         Assert.Equal("Scanning", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
+        Assert.NotNull((await db.BackupInventoryRuns.FindAsync(run.Id))!.LastProgressAt);
 
         Assert.True(await service.CompleteInventoryAsync(run.Id, "employee-1"));
         Assert.Equal("Completed", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);

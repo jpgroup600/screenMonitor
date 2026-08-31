@@ -8,7 +8,7 @@ import { restoreAttendanceMonitoring } from "../attendanceRecovery";
 import { restoreAuthorizedMonitoring, sendDeviceHeartbeat } from "../deviceHeartbeat";
 import { diffRemovableDrives, recordUsbChanges } from "../usbAudit";
 import { diffUsbFiles, recordUsbFileCopies } from "../usbFileAudit";
-import { BACKUP_INITIAL_DELAY_MS, BACKUP_INTERVAL_MS, runBackupCycle, runBackupQueueCycle } from "../backupScheduler";
+import { BACKUP_INITIAL_DELAY_MS, BACKUP_INTERVAL_MS, BACKUP_QUEUE_INTERVAL_MS, runBackupCycle, runBackupQueueCycle } from "../backupScheduler";
 import { loadDeviceSecurityPolicy, sameDeviceSecurityPolicy } from "../deviceSecurityPolicy";
 import { removeAuthToken } from "../authToken";
 
@@ -46,9 +46,16 @@ const Dashboard = ({ token, setToken }) => {
 
   useEffect(() => {
     if (!securityPolicy?.backupEnabled) return undefined;
-    const processQueue = () => runBackupQueueCycle({ native, storage: localStorage, policy: securityPolicy }).catch((error) => console.error("Backup queue failed:", error));
+    let running = false;
+    const processQueue = async () => {
+      if (running) return;
+      running = true;
+      try { await runBackupQueueCycle({ native, storage: localStorage, policy: securityPolicy }); }
+      catch (error) { console.error("Backup queue failed:", error); }
+      finally { running = false; }
+    };
     const initial = window.setTimeout(processQueue, 10_000);
-    const timer = window.setInterval(processQueue, 60_000);
+    const timer = window.setInterval(processQueue, BACKUP_QUEUE_INTERVAL_MS);
     return () => { window.clearTimeout(initial); window.clearInterval(timer); };
   }, [securityPolicy?.backupEnabled, securityPolicy?.resourceThrottlingEnabled, securityPolicy?.pauseBackupOnBattery, securityPolicy?.pauseBackupOnMeteredNetwork, securityPolicy?.dailyUploadLimitBytes]);
 

@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canStartInventoryBackup, inventoryBackupButtonLabel, inventoryHeartbeat } from './inventoryProgress.js';
+import { canStartInventoryBackup, inventoryBackupButtonLabel, inventoryBackupPercent, inventoryHeartbeat } from './inventoryProgress.js';
 
 test('backup can start before inventory scan completes', () => {
   assert.equal(canStartInventoryBackup({ status: 'Scanning', backupRequested: false }), true);
   assert.equal(canStartInventoryBackup({ status: 'Scanning', backupRequested: true }), false);
   assert.equal(inventoryBackupButtonLabel({ status: 'Scanning', backupRequested: false }), '발견 파일 백업 시작');
+});
+
+test('backup percentage uses only files eligible for upload', () => {
+  assert.equal(inventoryBackupPercent({ pending: 75, backedUp: 25, failed: 0, unchanged: 10 }), 25);
+  assert.equal(inventoryBackupPercent({ pending: 0, backedUp: 0, failed: 0 }), 0);
 });
 
 test('heartbeat distinguishes healthy delayed and unresponsive scans', () => {
