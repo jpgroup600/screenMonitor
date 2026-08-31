@@ -9,273 +9,190 @@ namespace ScreenshotMonitor.Tests;
 public class BackupInventoryServiceTests
 {
     [Fact]
-    public async Task Inventory_is_registered_before_backup_and_batches_are_idempotent()
+    public async Task Scan_discovers_files_without_creating_upload_work()
     {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var service = new BackupInventoryService(db, TimeProvider.System);
-        await service.SetRuleAsync("device-1", @"C:\Work", "Include");
-        var run = await service.StartAsync("employee-1", "device-1");
-        var entries = new[] { new InventoryEntry(@"C:\Work\a.txt", 10, 1), new InventoryEntry(@"C:\Work\b.txt", 20, 2) };
-        Assert.Equal(2, await service.AddBatchAsync(run.Id, "employee-1", entries));
-        Assert.Equal(0, await service.AddBatchAsync(run.Id, "employee-1", entries));
-        Assert.True(await service.CompleteInventoryAsync(run.Id, "employee-1"));
-        var progress = await service.ProgressAsync(run.Id);
-        Assert.Equal("InventoryReady", progress!.Status); Assert.Equal(2, progress.Total); Assert.Equal(2, progress.Pending);
+        await service.SetRuleAsync("device", @"C:\Work", "Include");
+        var run = await service.StartAsync("employee", "device");
+        var files = new[] { new InventoryEntry(@"C:\Work\a.txt", 10, 1), new InventoryEntry(@"C:\Work\b.txt", 20, 2) };
+        Assert.Equal(2, await service.AddBatchAsync(run.Id, "employee", files));
+        Assert.Equal(0, await service.AddBatchAsync(run.Id, "employee", files));
+        Assert.Empty(await service.PendingItemsAsync(run.Id, "employee", "device", 10));
+        Assert.True(await service.CompleteInventoryAsync(run.Id, "employee"));
+        Assert.Equal("PolicyDraft", (await service.ProgressAsync(run.Id))!.Status);
+        Assert.All(db.BackupInventoryItems, item => Assert.Equal("Discovered", item.Status));
     }
 
     [Fact]
-    public async Task Most_specific_path_rule_wins_and_default_is_excluded()
+    public async Task Policy_must_be_confirmed_before_backup_can_start()
     {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var service = new BackupInventoryService(db, TimeProvider.System);
-        await service.SetRuleAsync("device-1", @"C:\Work", "Exclude");
-        await service.SetRuleAsync("device-1", @"C:\Work\Company", "Include");
-        var run = await service.StartAsync("employee-1", "device-1");
-        await service.AddBatchAsync(run.Id, "employee-1", new[] {
-            new InventoryEntry(@"C:\Work\private.txt", 1, 1),
-            new InventoryEntry(@"C:\Work\Company\plan.docx", 2, 2),
-            new InventoryEntry(@"D:\Other\default.txt", 3, 3) });
-        await service.CompleteInventoryAsync(run.Id, "employee-1");
-        var rows = await db.BackupInventoryItems.OrderBy(x => x.Path).ToListAsync();
-        Assert.Equal("Pending", rows.Single(x => x.Path.Contains("Company")).Status);
-        Assert.Equal("Excluded", rows.Single(x => x.Path.Contains("private")).Status);
-        Assert.Equal("Excluded", rows.Single(x => x.Path.Contains("default")).Status);
+        await service.SetRuleAsync("device", @"C:\Work", "Include");
+        var run = await CompletedScan(service);
+        Assert.False(await service.StartBackupAsync(run.Id));
+        Assert.True(await service.ConfirmPlanAsync(run.Id));
+        Assert.Equal("PlanReady", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
         Assert.True(await service.StartBackupAsync(run.Id));
-        Assert.Equal("BackingUp", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
-        var pending = await service.PendingItemsAsync(run.Id, "employee-1", "device-1", 10);
-        Assert.Single(pending);
-        foreach (var item in pending) Assert.True(await service.RecordResultAsync(item.Id, "employee-1", "device-1", true, null));
+        Assert.Single(await service.PendingItemsAsync(run.Id, "employee", "device", 10));
+    }
+
+    [Fact]
+    public async Task Most_specific_rule_is_frozen_at_confirmation()
+    {
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        await service.SetRuleAsync("device", @"C:\Work", "Include");
+        await service.SetRuleAsync("device", @"C:\Work\Private", "Exclude");
+        var run = await service.StartAsync("employee", "device");
+        await service.AddBatchAsync(run.Id, "employee", new[] {
+            new InventoryEntry(@"C:\Work\plan.docx", 10, 1), new InventoryEntry(@"C:\Work\Private\secret.txt", 20, 2),
+            new InventoryEntry(@"D:\Other\default.txt", 30, 3) });
+        await service.CompleteInventoryAsync(run.Id, "employee"); await service.ConfirmPlanAsync(run.Id);
+        Assert.Equal("Pending", db.BackupInventoryItems.Single(x => x.Path.EndsWith("plan.docx")).Status);
+        Assert.Equal("Excluded", db.BackupInventoryItems.Single(x => x.Path.EndsWith("secret.txt")).Status);
+        Assert.Equal("Excluded", db.BackupInventoryItems.Single(x => x.Path.EndsWith("default.txt")).Status);
+
+        await service.SetRuleAsync("device", @"C:\Work", "Exclude");
+        Assert.Equal("Pending", db.BackupInventoryItems.Single(x => x.Path.EndsWith("plan.docx")).Status);
+        Assert.False(await service.ConfirmPlanAsync(run.Id));
+    }
+
+    [Fact]
+    public async Task Unchanged_files_never_enter_the_confirmed_plan()
+    {
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        await service.SetRuleAsync("device", @"C:\Work", "Include");
+        var run = await service.StartAsync("employee", "device");
+        await service.AddBatchAsync(run.Id, "employee", new[] {
+            new InventoryEntry(@"C:\Work\same.txt", 1, 1, false), new InventoryEntry(@"C:\Work\changed.txt", 2, 2, true) });
+        await service.CompleteInventoryAsync(run.Id, "employee"); await service.ConfirmPlanAsync(run.Id); await service.StartBackupAsync(run.Id);
+        Assert.Single(await service.PendingItemsAsync(run.Id, "employee", "device", 10));
+        Assert.Equal("Unchanged", db.BackupInventoryItems.Single(x => x.Path.EndsWith("same.txt")).Status);
+    }
+
+    [Fact]
+    public async Task Folder_totals_and_boundaries_are_available_for_policy_editing()
+    {
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        var run = await service.StartAsync("employee", "device");
+        await service.AddBatchAsync(run.Id, "employee", new[] {
+            new InventoryEntry(@"C:\Work\inside.txt", 10, 1), new InventoryEntry(@"C:\Work\Child\deep.txt", 20, 2),
+            new InventoryEntry(@"C:\Workspace\outside.txt", 30, 3) });
+        await service.CompleteInventoryAsync(run.Id, "employee");
+        var work = Assert.Single(await service.ListFoldersAsync(run.Id, "Work"), x => x.Path == @"C:\Work");
+        Assert.Equal(2, work.FileCount); Assert.Equal(30, work.SizeBytes);
+        Assert.Equal(2, (await service.ListItemsAsync(run.Id, null, null, folderPath: @"C:\Work")).Count);
+    }
+
+    [Fact]
+    public async Task Stale_scan_is_abandoned_but_policy_draft_is_retained()
+    {
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var clock = new Clock(new DateTimeOffset(2026, 8, 31, 0, 0, 0, TimeSpan.Zero));
+        var service = new BackupInventoryService(db, clock);
+        var stale = await service.StartAsync("employee", "device");
+        clock.Advance(BackupInventoryService.StaleScanningTimeout + TimeSpan.FromMinutes(1));
+        Assert.Null(await service.ActiveRunAsync("employee", "device"));
+        Assert.Equal("Abandoned", (await db.BackupInventoryRuns.FindAsync(stale.Id))!.Status);
+        var ready = await CompletedScan(service); clock.Advance(TimeSpan.FromDays(1));
+        Assert.Equal(ready.Id, (await service.ActiveRunAsync("employee", "device"))!.Id);
+    }
+
+    [Fact]
+    public async Task Backup_results_complete_the_frozen_plan()
+    {
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        await service.SetRuleAsync("device", @"C:\Work", "Include");
+        var run = await CompletedScan(service); await service.ConfirmPlanAsync(run.Id); await service.StartBackupAsync(run.Id);
+        var item = Assert.Single(await service.PendingItemsAsync(run.Id, "employee", "device", 10));
+        Assert.True(await service.RecordResultAsync(item.Id, "employee", "device", true, null));
         Assert.Equal("Completed", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
+        Assert.NotNull((await service.ProgressAsync(run.Id))!.LastBackupActivityAt);
     }
 
     [Fact]
-    public async Task Changing_rules_does_not_reset_terminal_backup_results()
+    public async Task Bulk_folder_rules_are_stored_once_per_path()
     {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var service = new BackupInventoryService(db, TimeProvider.System);
-        await service.SetRuleAsync("device-1", @"C:\Work", "Include");
-        var run = await service.StartAsync("employee-1", "device-1");
-        await service.AddBatchAsync(run.Id, "employee-1", new[] {
-            new InventoryEntry(@"C:\Work\done.txt", 1, 1),
-            new InventoryEntry(@"C:\Work\waiting.txt", 2, 2) });
-        await service.CompleteInventoryAsync(run.Id, "employee-1");
-        Assert.True(await service.StartBackupAsync(run.Id));
-        var done = (await service.PendingItemsAsync(run.Id, "employee-1", "device-1", 1)).Single();
-        Assert.True(await service.RecordResultAsync(done.Id, "employee-1", "device-1", true, null));
-
-        await service.SetRuleAsync("device-1", @"C:\Work", "Exclude");
-
-        var rows = await db.BackupInventoryItems.OrderBy(x => x.Path).ToListAsync();
-        Assert.Equal("BackedUp", rows.Single(x => x.Id == done.Id).Status);
-        Assert.Equal("Excluded", rows.Single(x => x.Id != done.Id).Status);
-    }
-
-    [Fact]
-    public async Task Bulk_rules_are_applied_to_all_selected_paths_in_one_operation()
-    {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
-        var service = new BackupInventoryService(db, TimeProvider.System);
-        var run = await service.StartAsync("employee-1", "device-1");
-        await service.AddBatchAsync(run.Id, "employee-1", new[] {
-            new InventoryEntry(@"C:\Work\a.txt", 1, 1),
-            new InventoryEntry(@"C:\Work\b.txt", 2, 2),
-            new InventoryEntry(@"C:\Work\c.txt", 3, 3) });
-        await service.CompleteInventoryAsync(run.Id, "employee-1");
-
-        Assert.Equal(2, await service.SetRulesAsync("device-1", new[] { @"C:\Work\a.txt", @"C:\Work\b.txt" }, "Exclude"));
-
-        var rows = await db.BackupInventoryItems.OrderBy(x => x.Path).ToListAsync();
-        Assert.Equal(new[] { "Excluded", "Excluded", "Excluded" }, rows.Select(x => x.Status));
+        Assert.Equal(2, await service.SetRulesAsync("device", new[] { @"C:\One", @"C:\Two", @"C:\One" }, "Include"));
         Assert.Equal(2, await db.BackupPathRules.CountAsync());
     }
 
     [Fact]
-    public async Task Unchanged_files_are_visible_but_never_queued_for_upload()
+    public async Task Removing_a_draft_rule_does_not_touch_discovered_files()
     {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var service = new BackupInventoryService(db, TimeProvider.System);
-        await service.SetRuleAsync("device-1", @"C:\Work", "Include");
-        var run = await service.StartAsync("employee-1", "device-1");
-        await service.AddBatchAsync(run.Id, "employee-1", new[] {
-            new InventoryEntry(@"C:\Work\same.txt", 1, 1, false),
-            new InventoryEntry(@"C:\Work\changed.txt", 2, 2, true) });
-        await service.CompleteInventoryAsync(run.Id, "employee-1");
-        var progress = await service.ProgressAsync(run.Id);
-        Assert.Equal(1, progress!.Unchanged); Assert.Equal(1, progress.Pending);
-        Assert.True(await service.StartBackupAsync(run.Id));
-        var pending = await service.PendingItemsAsync(run.Id, "employee-1", "device-1", 10);
-        Assert.Single(pending); Assert.EndsWith("changed.txt", pending[0].Path);
+        var rule = await service.SetRuleAsync("device", @"C:\Work", "Include");
+        var run = await CompletedScan(service);
+        Assert.NotNull(await service.RemoveRuleAsync(rule.Id));
+        Assert.Equal("Discovered", Assert.Single(db.BackupInventoryItems).Status);
+        Assert.Null(await service.RemoveRuleAsync("missing"));
     }
 
     [Fact]
-    public async Task Folders_aggregate_all_descendant_files_for_folder_policy_management()
+    public async Task Folder_search_is_paginated_after_sorting()
     {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var service = new BackupInventoryService(db, TimeProvider.System);
-        await service.SetRuleAsync("device-1", @"C:\Users\ASUS\Desktop", "Include");
-        var run = await service.StartAsync("employee-1", "device-1");
-        await service.AddBatchAsync(run.Id, "employee-1", new[] {
-            new InventoryEntry(@"C:\Users\ASUS\Desktop\a.txt", 10, 1),
-            new InventoryEntry(@"C:\Users\ASUS\Desktop\Work\b.txt", 20, 2),
-            new InventoryEntry(@"C:\Users\ASUS\Documents\c.txt", 30, 3, false) });
-        await service.CompleteInventoryAsync(run.Id, "employee-1");
-
-        var folders = await service.ListFoldersAsync(run.Id, "Desktop");
-
-        var desktop = Assert.Single(folders, x => x.Path == @"C:\Users\ASUS\Desktop");
-        Assert.Equal(2, desktop.FileCount);
-        Assert.Equal(30, desktop.SizeBytes);
-        Assert.Equal(2, desktop.Pending);
-        Assert.Contains(folders, x => x.Path == @"C:\Users\ASUS\Desktop\Work" && x.FileCount == 1);
-    }
-
-    [Fact]
-    public async Task Folder_listing_is_paginated_after_search_and_sorting()
-    {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
-        var service = new BackupInventoryService(db, TimeProvider.System);
-        var run = await service.StartAsync("employee-1", "device-1");
-        await service.AddBatchAsync(run.Id, "employee-1", Enumerable.Range(0, 4)
-            .Select(index => new InventoryEntry($@"C:\Work\Folder{index}\file.txt", 1, index)));
-        await service.CompleteInventoryAsync(run.Id, "employee-1");
-
-        var page = await service.ListFoldersAsync(run.Id, "Folder", skip: 1, take: 2);
-
+        var run = await service.StartAsync("employee", "device");
+        await service.AddBatchAsync(run.Id, "employee", Enumerable.Range(0, 4).Select(i => new InventoryEntry($@"C:\Work\Folder{i}\file.txt", 1, i)));
+        var page = await service.ListFoldersAsync(run.Id, "Folder", 1, 2);
         Assert.Equal(new[] { @"C:\Work\Folder1", @"C:\Work\Folder2" }, page.Select(x => x.Path));
     }
 
     [Fact]
-    public async Task Removing_a_rule_reapplies_the_remaining_parent_or_default_policy()
+    public async Task Scan_progress_is_monotonic()
     {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var service = new BackupInventoryService(db, TimeProvider.System);
-        var parent = await service.SetRuleAsync("device-1", @"C:\Work", "Exclude");
-        var child = await service.SetRuleAsync("device-1", @"C:\Work\Allowed", "Include");
-        var run = await service.StartAsync("employee-1", "device-1");
-        await service.AddBatchAsync(run.Id, "employee-1", new[] { new InventoryEntry(@"C:\Work\Allowed\plan.txt", 1, 1) });
-        await service.CompleteInventoryAsync(run.Id, "employee-1");
-        Assert.Equal("Pending", Assert.Single(db.BackupInventoryItems).Status);
-
-        Assert.Equal(child.Id, (await service.RemoveRuleAsync(child.Id))!.Id);
-
-        Assert.Equal("Excluded", Assert.Single(db.BackupInventoryItems).Status);
-        Assert.Null(await service.RemoveRuleAsync("missing"));
-        Assert.NotNull(await db.BackupPathRules.FindAsync(parent.Id));
-    }
-
-    [Fact]
-    public async Task Stale_interrupted_scan_is_abandoned_so_the_agent_can_restart_inventory()
-    {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
-        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 31, 0, 0, 0, TimeSpan.Zero));
-        var service = new BackupInventoryService(db, clock);
-        var stale = await service.StartAsync("employee-1", "device-1");
-        clock.Advance(BackupInventoryService.StaleScanningTimeout + TimeSpan.FromMinutes(1));
-
-        Assert.Null(await service.ActiveRunAsync("employee-1", "device-1"));
-        Assert.Equal("Abandoned", (await db.BackupInventoryRuns.FindAsync(stale.Id))!.Status);
-
-        var restarted = await service.StartAsync("employee-1", "device-1");
-        Assert.Equal(restarted.Id, (await service.ActiveRunAsync("employee-1", "device-1"))!.Id);
-        Assert.Equal("Scanning", restarted.Status);
-    }
-
-    [Fact]
-    public async Task Recent_scan_is_not_abandoned()
-    {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
-        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 31, 0, 0, 0, TimeSpan.Zero));
-        var service = new BackupInventoryService(db, clock);
-        var recent = await service.StartAsync("employee-1", "device-1");
-        clock.Advance(TimeSpan.FromMinutes(30));
-
-        Assert.Equal(recent.Id, (await service.ActiveRunAsync("employee-1", "device-1"))!.Id);
-        Assert.Equal("Scanning", (await db.BackupInventoryRuns.FindAsync(recent.Id))!.Status);
-    }
-
-    [Fact]
-    public async Task Progress_heartbeat_is_monotonic_and_keeps_a_long_scan_active()
-    {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
-        var clock = new FakeTimeProvider(new DateTimeOffset(2026, 8, 31, 0, 0, 0, TimeSpan.Zero));
-        var service = new BackupInventoryService(db, clock);
-        var run = await service.StartAsync("employee-1", "device-1");
-        clock.Advance(TimeSpan.FromHours(1) + TimeSpan.FromMinutes(50));
-        Assert.True(await service.UpdateProgressAsync(run.Id, "employee-1", 50, 500, 3, 1, @"C:\Work"));
-        clock.Advance(TimeSpan.FromMinutes(20));
-        Assert.True(await service.UpdateProgressAsync(run.Id, "employee-1", 40, 400, 2, 0, @"C:\Work\next"));
-
-        var active = await service.ActiveRunAsync("employee-1", "device-1");
+        var run = await service.StartAsync("employee", "device");
+        await service.UpdateProgressAsync(run.Id, "employee", 50, 500, 3, 1, @"C:\One");
+        await service.UpdateProgressAsync(run.Id, "employee", 40, 400, 2, 0, @"C:\Two");
         var progress = await service.ProgressAsync(run.Id);
-        Assert.Equal(run.Id, active!.Id);
-        Assert.Equal(50, progress!.DiscoveredFiles);
-        Assert.Equal(500, progress.DiscoveredBytes);
-        Assert.Equal(@"C:\Work\next", progress.CurrentPath);
+        Assert.Equal(50, progress!.DiscoveredFiles); Assert.Equal(500, progress.DiscoveredBytes); Assert.Equal(@"C:\Two", progress.CurrentPath);
     }
 
     [Fact]
-    public async Task Backup_can_be_requested_and_processed_while_scan_continues()
+    public async Task Recent_scanning_run_remains_active()
     {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
-        var service = new BackupInventoryService(db, TimeProvider.System);
-        await service.SetRuleAsync("device-1", @"C:\Work", "Include");
-        await service.SetRuleAsync("device-1", @"C:\Private", "Exclude");
-        var run = await service.StartAsync("employee-1", "device-1");
-        Assert.True(await service.StartBackupAsync(run.Id));
-        Assert.Equal("Scanning", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
-        await service.AddBatchAsync(run.Id, "employee-1", new[] {
-            new InventoryEntry(@"C:\Work\ready.txt", 1, 1),
-            new InventoryEntry(@"C:\Private\secret.txt", 2, 2) });
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var clock = new Clock(new DateTimeOffset(2026, 8, 31, 0, 0, 0, TimeSpan.Zero));
+        var service = new BackupInventoryService(db, clock); var run = await service.StartAsync("employee", "device");
+        clock.Advance(TimeSpan.FromMinutes(30)); Assert.Equal(run.Id, (await service.ActiveRunAsync("employee", "device"))!.Id);
+    }
 
-        var pending = Assert.Single(await service.PendingItemsAsync(run.Id, "employee-1", "device-1", 10));
-        Assert.EndsWith("ready.txt", pending.Path);
-        Assert.True(await service.RecordResultAsync(pending.Id, "employee-1", "device-1", true, null));
-        Assert.Equal("Scanning", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
-        Assert.NotNull((await service.ProgressAsync(run.Id))!.LastBackupActivityAt);
-
-        Assert.True(await service.CompleteInventoryAsync(run.Id, "employee-1"));
+    [Fact]
+    public async Task Empty_include_policy_confirms_as_an_empty_plan()
+    {
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System); var run = await CompletedScan(service);
+        Assert.True(await service.ConfirmPlanAsync(run.Id)); Assert.True(await service.StartBackupAsync(run.Id));
         Assert.Equal("Completed", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
     }
 
     [Fact]
-    public async Task Completed_inventory_can_be_reapplied_after_an_admin_adds_an_include_rule()
+    public async Task Invalid_actions_and_empty_paths_are_rejected()
     {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var service = new BackupInventoryService(db, TimeProvider.System);
-        var run = await service.StartAsync("employee-1", "device-1");
-        await service.AddBatchAsync(run.Id, "employee-1", new[] { new InventoryEntry(@"C:\Company\plan.docx", 10, 1) });
-        await service.CompleteInventoryAsync(run.Id, "employee-1");
-        Assert.True(await service.StartBackupAsync(run.Id));
-        Assert.Equal("Completed", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
-
-        await service.SetRuleAsync("device-1", @"C:\Company", "Include");
-        Assert.True(await service.StartBackupAsync(run.Id));
-
-        Assert.Equal("BackingUp", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
-        Assert.Single(await service.PendingItemsAsync(run.Id, "employee-1", "device-1", 10));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SetRuleAsync("device", " ", "Include"));
+        await Assert.ThrowsAsync<ArgumentException>(() => service.SetRuleAsync("device", @"C:\Work", "Maybe"));
     }
 
-    [Fact]
-    public async Task Folder_file_listing_does_not_include_similarly_named_sibling_folders()
+    private static async Task<BackupInventoryRun> CompletedScan(BackupInventoryService service)
     {
-        await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
-        var service = new BackupInventoryService(db, TimeProvider.System);
-        var run = await service.StartAsync("employee-1", "device-1");
-        await service.AddBatchAsync(run.Id, "employee-1", new[] {
-            new InventoryEntry(@"C:\Work\inside.txt", 1, 1),
-            new InventoryEntry(@"C:\Workspace\outside.txt", 1, 1) });
-
-        var files = await service.ListItemsAsync(run.Id, null, null, folderPath: @"C:\Work");
-
-        Assert.Equal(@"C:\Work\inside.txt", Assert.Single(files).Path);
+        var run = await service.StartAsync("employee", "device");
+        await service.AddBatchAsync(run.Id, "employee", new[] { new InventoryEntry(@"C:\Work\plan.docx", 10, 1) });
+        await service.CompleteInventoryAsync(run.Id, "employee"); return run;
     }
-
-    private static User Employee() => new() { Id = "employee-1", FullName = "Employee", Email = "e@example.com", PasswordHash = "hash", Role = "Employee", Designation = "", PhoneNumber = "" };
-    private static SmDbContext CreateDb() => new(new DbContextOptionsBuilder<SmDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-    private sealed class FakeTimeProvider(DateTimeOffset now) : TimeProvider
-    {
-        private DateTimeOffset current = now;
-        public override DateTimeOffset GetUtcNow() => current;
-        public void Advance(TimeSpan value) => current += value;
-    }
+    private static User Employee() => new() { Id = "employee", FullName = "Employee", Email = "e@example.com", PasswordHash = "hash", Role = "Employee", Designation = "", PhoneNumber = "" };
+    private static SmDbContext Db() => new(new DbContextOptionsBuilder<SmDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+    private sealed class Clock(DateTimeOffset now) : TimeProvider { private DateTimeOffset value = now; public override DateTimeOffset GetUtcNow() => value; public void Advance(TimeSpan amount) => value += amount; }
 }

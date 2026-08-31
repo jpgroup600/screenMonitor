@@ -1,12 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canStartInventoryBackup, inventoryBackupButtonLabel, inventoryBackupPercent, inventoryHeartbeat } from './inventoryProgress.js';
+import { canConfirmInventoryPlan, canStartInventoryBackup, inventoryBackupButtonLabel, inventoryBackupPercent, inventoryHeartbeat } from './inventoryProgress.js';
 
-test('backup can start before inventory scan completes', () => {
-  assert.equal(canStartInventoryBackup({ status: 'Scanning', backupRequested: false }), true);
-  assert.equal(canStartInventoryBackup({ status: 'Scanning', backupRequested: true }), true);
-  assert.equal(canStartInventoryBackup({ status: 'Completed', backupRequested: true }), true);
-  assert.equal(inventoryBackupButtonLabel({ status: 'Scanning', backupRequested: false }), '발견 파일 백업 시작');
+test('policy confirmation and backup start are separate states', () => {
+  assert.equal(canConfirmInventoryPlan({ status: 'PolicyDraft' }), true);
+  assert.equal(canStartInventoryBackup({ status: 'PolicyDraft' }), false);
+  assert.equal(canConfirmInventoryPlan({ status: 'PlanReady' }), false);
+  assert.equal(canStartInventoryBackup({ status: 'PlanReady' }), true);
+  assert.equal(inventoryBackupButtonLabel({ status: 'Scanning' }), '스캔 완료 후 사용 가능');
 });
 
 test('backup percentage uses only files eligible for upload', () => {

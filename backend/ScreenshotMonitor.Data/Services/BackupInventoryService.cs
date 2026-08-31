@@ -34,13 +34,10 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         var existing = (await db.BackupInventoryItems.Where(x => x.RunId == runId && paths.Contains(x.Path)).Select(x => x.Path).ToListAsync())
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var now = timeProvider.GetUtcNow().UtcDateTime;
-        var rules = await db.BackupPathRules.AsNoTracking().Where(x => x.DeviceId == run.DeviceId).ToListAsync();
         var added = batch.Where(x => existing.Add(x.Path)).Select(x => {
-            var rule = rules.Where(rule => IsWithin(x.Path, rule.Path)).OrderByDescending(rule => rule.Path.Length).FirstOrDefault();
-            var status = !x.RequiresBackup ? "Unchanged" : rule?.Action == "Include" ? "Pending" : "Excluded";
             return new BackupInventoryItem {
                 Run = run, Path = x.Path, SizeBytes = x.SizeBytes, ModifiedUnixSeconds = x.ModifiedUnixSeconds,
-                RequiresBackup = x.RequiresBackup, Status = status, DiscoveredAt = now
+                RequiresBackup = x.RequiresBackup, Status = x.RequiresBackup ? "Discovered" : "Unchanged", DiscoveredAt = now
             };
         }).ToList();
         db.BackupInventoryItems.AddRange(added); await db.SaveChangesAsync(); return added.Count;
@@ -50,13 +47,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
     {
         var run = await db.BackupInventoryRuns.FirstOrDefaultAsync(x => x.Id == runId && x.EmployeeId == employeeId && x.Status == "Scanning");
         if (run is null) return false;
-        run.Status = run.BackupRequested ? "BackingUp" : "InventoryReady"; run.InventoryCompletedAt = timeProvider.GetUtcNow().UtcDateTime;
-        await ApplyRulesAsync(run);
-        if (run.BackupRequested && !await db.BackupInventoryItems.AnyAsync(x => x.RunId == run.Id && x.Status == "Pending"))
-        {
-            run.Status = "Completed";
-            run.BackupCompletedAt = timeProvider.GetUtcNow().UtcDateTime;
-        }
+        run.Status = "PolicyDraft"; run.InventoryCompletedAt = timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync(); return true;
     }
 
@@ -69,9 +60,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         if (rule is null) { rule = new BackupPathRule { DeviceId = deviceId, Path = path }; db.BackupPathRules.Add(rule); }
         rule.Action = action; rule.CreatedAt = timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync();
-        foreach (var run in await db.BackupInventoryRuns.Where(x => x.DeviceId == deviceId && (x.Status == "Scanning" || x.Status == "InventoryReady" || x.Status == "BackingUp")).ToListAsync())
-            await ApplyRulesAsync(run);
-        await db.SaveChangesAsync(); return rule;
+        return rule;
     }
 
     public async Task<int> SetRulesAsync(string deviceId, IEnumerable<string> paths, string action)
@@ -90,20 +79,25 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
             rule.Action = action; rule.CreatedAt = now;
         }
         await db.SaveChangesAsync();
-        foreach (var run in await db.BackupInventoryRuns.Where(x => x.DeviceId == deviceId && (x.Status == "Scanning" || x.Status == "InventoryReady" || x.Status == "BackingUp")).ToListAsync())
-            await ApplyRulesAsync(run);
-        await db.SaveChangesAsync();
         return normalizedPaths.Count;
+    }
+
+    public async Task<bool> ConfirmPlanAsync(string runId)
+    {
+        var run = await db.BackupInventoryRuns.FirstOrDefaultAsync(x => x.Id == runId && x.Status == "PolicyDraft");
+        if (run is null) return false;
+        await ApplyRulesAsync(run);
+        run.Status = "PlanReady";
+        run.BackupRequested = false;
+        await db.SaveChangesAsync();
+        return true;
     }
 
     public async Task<bool> StartBackupAsync(string runId)
     {
-        var run = await db.BackupInventoryRuns.FirstOrDefaultAsync(x => x.Id == runId && x.Status != "Abandoned");
+        var run = await db.BackupInventoryRuns.FirstOrDefaultAsync(x => x.Id == runId && x.Status == "PlanReady");
         if (run is null) return false;
         run.BackupRequested = true;
-        await ApplyRulesAsync(run);
-        await db.SaveChangesAsync();
-        if (run.Status == "Scanning") { await db.SaveChangesAsync(); return true; }
         if (await db.BackupInventoryItems.AnyAsync(x => x.RunId == runId && x.Status == "Pending")) run.Status = "BackingUp";
         else { run.Status = "Completed"; run.BackupCompletedAt = timeProvider.GetUtcNow().UtcDateTime; }
         await db.SaveChangesAsync(); return true;
@@ -225,10 +219,6 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         if (rule is null) return null;
         db.BackupPathRules.Remove(rule);
         await db.SaveChangesAsync();
-        foreach (var run in await db.BackupInventoryRuns.Where(x => x.DeviceId == rule.DeviceId
-            && (x.Status == "Scanning" || x.Status == "InventoryReady" || x.Status == "BackingUp")).ToListAsync())
-            await ApplyRulesAsync(run);
-        await db.SaveChangesAsync();
         return rule;
     }
 
@@ -244,7 +234,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         }
         return await db.BackupInventoryRuns.AsNoTracking()
             .Where(x => x.EmployeeId == employeeId && x.DeviceId == deviceId
-                && (x.Status == "Scanning" || x.Status == "InventoryReady" || x.Status == "BackingUp"))
+                && (x.Status == "Scanning" || x.Status == "PolicyDraft" || x.Status == "PlanReady" || x.Status == "BackingUp"))
             .OrderByDescending(x => x.StartedAt).FirstOrDefaultAsync();
     }
 
@@ -275,7 +265,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         var items = await db.BackupInventoryItems.Where(x => x.RunId == run.Id).ToListAsync();
         foreach (var item in items)
         {
-            if (item.Status is not ("Pending" or "Excluded")) continue;
+            if (item.Status is not ("Discovered" or "Pending" or "Excluded")) continue;
             var rule = rules.Where(x => IsWithin(item.Path, x.Path)).OrderByDescending(x => x.Path.Length).FirstOrDefault();
             item.Status = rule?.Action == "Include" ? "Pending" : "Excluded";
         }

@@ -124,6 +124,14 @@ public class BackupsController(BackupService service, BackupRestoreService resto
         return NoContent();
     }
 
+    [Authorize(Roles = "Admin"), HttpPost("inventory/runs/{runId}/confirm-plan")]
+    public async Task<IActionResult> ConfirmInventoryPlan(string runId)
+    {
+        if (!await inventoryService.ConfirmPlanAsync(runId)) return Conflict(new { message = "스캔 완료 후 정책 편집 상태에서만 계획을 확정할 수 있습니다." });
+        await audit.AppendAndSaveAsync(EmployeeId, "INVENTORY_PLAN_CONFIRMED", "BackupInventoryRun", runId, null, new { Status = "PlanReady" });
+        return NoContent();
+    }
+
     [Authorize(Roles = "Admin"), HttpGet("inventory/runs/{runId}/progress")]
     public async Task<ActionResult<InventoryProgressDto>> InventoryProgress(string runId)
     {

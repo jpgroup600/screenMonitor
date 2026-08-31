@@ -1,6 +1,7 @@
 mod api;
 mod auth_token;
 mod backup_inventory;
+mod inventory_checkpoint;
 mod backup_manifest;
 mod backup_policy;
 mod backup_retry;
@@ -50,6 +51,7 @@ struct AppState {
     queue: Arc<OfflineQueue>,
     backup_staging_directory: PathBuf,
     backup_manifest_path: PathBuf,
+    inventory_checkpoint_path: PathBuf,
     backup_retry_directory: PathBuf,
     restore_directory: PathBuf,
     service_config_path: PathBuf,
@@ -69,6 +71,10 @@ impl AppState {
             .parent()
             .ok_or("Invalid application data directory")?
             .join("backup-manifest.dat");
+        let inventory_checkpoint_path = queue_directory
+            .parent()
+            .ok_or("Invalid application data directory")?
+            .join("inventory-checkpoint.dat");
         let backup_retry_directory = queue_directory
             .parent()
             .ok_or("Invalid application data directory")?
@@ -93,6 +99,7 @@ impl AppState {
             queue: Arc::new(OfflineQueue::new(queue_directory)?),
             backup_staging_directory,
             backup_manifest_path,
+            inventory_checkpoint_path,
             backup_retry_directory,
             restore_directory,
             service_config_path: shared_directory.join("agent-policy.dat"),
@@ -413,6 +420,7 @@ async fn run_incremental_backup(
     state: State<'_, AppState>,
 ) -> Result<IncrementalBackupResult, String> {
     let client = api::ApiClient::new(BACKEND_URL.into(), token.clone());
+    let _local_scan_status = inventory_checkpoint::InventoryCheckpoint::load(&state.inventory_checkpoint_path).ok().flatten();
     if client.active_inventory(&device_id).await?.is_some() {
         return Ok(IncrementalBackupResult {
             scanned_files: 0,
@@ -423,8 +431,8 @@ async fn run_incremental_backup(
             inaccessible_entries: 0,
         });
     }
-    let inventory_run = client.start_inventory(&device_id).await?;
     let manifest = backup_manifest::BackupManifest::load(&state.backup_manifest_path)?;
+    let inventory_run = client.start_inventory(&device_id).await?;
     let scan_manifest = manifest.clone();
     let scan_roots = roots.clone();
     let (scan_tx, mut scan_rx) = tokio::sync::mpsc::channel(4);
@@ -527,6 +535,7 @@ async fn run_incremental_backup(
         }
         next_manifest.save(&state.backup_manifest_path)?;
     }
+    inventory_checkpoint::InventoryCheckpoint { roots, inventory: inventory.clone() }.save(&state.inventory_checkpoint_path)?;
     client.complete_inventory(&inventory_run.id).await?;
     return Ok(IncrementalBackupResult {
         scanned_files: inventory.files.len(),
