@@ -16,7 +16,7 @@ public record InventoryFolder(string Path, string Name, string? ParentPath, int 
 
 public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
 {
-    public static readonly TimeSpan StaleScanningTimeout = TimeSpan.FromHours(2);
+    public static readonly TimeSpan StaleScanningTimeout = TimeSpan.FromMinutes(2);
 
     public async Task<BackupInventoryRun> StartAsync(string employeeId, string deviceId)
     {
