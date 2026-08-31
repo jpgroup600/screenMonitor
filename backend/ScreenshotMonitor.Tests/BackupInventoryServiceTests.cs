@@ -13,6 +13,7 @@ public class BackupInventoryServiceTests
     {
         await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var service = new BackupInventoryService(db, TimeProvider.System);
+        await service.SetRuleAsync("device-1", @"C:\Work", "Include");
         var run = await service.StartAsync("employee-1", "device-1");
         var entries = new[] { new InventoryEntry(@"C:\Work\a.txt", 10, 1), new InventoryEntry(@"C:\Work\b.txt", 20, 2) };
         Assert.Equal(2, await service.AddBatchAsync(run.Id, "employee-1", entries));
@@ -23,7 +24,7 @@ public class BackupInventoryServiceTests
     }
 
     [Fact]
-    public async Task Most_specific_path_rule_wins_and_default_is_included()
+    public async Task Most_specific_path_rule_wins_and_default_is_excluded()
     {
         await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var service = new BackupInventoryService(db, TimeProvider.System);
@@ -38,11 +39,11 @@ public class BackupInventoryServiceTests
         var rows = await db.BackupInventoryItems.OrderBy(x => x.Path).ToListAsync();
         Assert.Equal("Pending", rows.Single(x => x.Path.Contains("Company")).Status);
         Assert.Equal("Excluded", rows.Single(x => x.Path.Contains("private")).Status);
-        Assert.Equal("Pending", rows.Single(x => x.Path.Contains("default")).Status);
+        Assert.Equal("Excluded", rows.Single(x => x.Path.Contains("default")).Status);
         Assert.True(await service.StartBackupAsync(run.Id));
         Assert.Equal("BackingUp", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
         var pending = await service.PendingItemsAsync(run.Id, "employee-1", "device-1", 10);
-        Assert.Equal(2, pending.Count);
+        Assert.Single(pending);
         foreach (var item in pending) Assert.True(await service.RecordResultAsync(item.Id, "employee-1", "device-1", true, null));
         Assert.Equal("Completed", (await db.BackupInventoryRuns.FindAsync(run.Id))!.Status);
     }
@@ -52,6 +53,7 @@ public class BackupInventoryServiceTests
     {
         await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var service = new BackupInventoryService(db, TimeProvider.System);
+        await service.SetRuleAsync("device-1", @"C:\Work", "Include");
         var run = await service.StartAsync("employee-1", "device-1");
         await service.AddBatchAsync(run.Id, "employee-1", new[] {
             new InventoryEntry(@"C:\Work\done.txt", 1, 1),
@@ -83,7 +85,7 @@ public class BackupInventoryServiceTests
         Assert.Equal(2, await service.SetRulesAsync("device-1", new[] { @"C:\Work\a.txt", @"C:\Work\b.txt" }, "Exclude"));
 
         var rows = await db.BackupInventoryItems.OrderBy(x => x.Path).ToListAsync();
-        Assert.Equal(new[] { "Excluded", "Excluded", "Pending" }, rows.Select(x => x.Status));
+        Assert.Equal(new[] { "Excluded", "Excluded", "Excluded" }, rows.Select(x => x.Status));
         Assert.Equal(2, await db.BackupPathRules.CountAsync());
     }
 
@@ -92,6 +94,7 @@ public class BackupInventoryServiceTests
     {
         await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var service = new BackupInventoryService(db, TimeProvider.System);
+        await service.SetRuleAsync("device-1", @"C:\Work", "Include");
         var run = await service.StartAsync("employee-1", "device-1");
         await service.AddBatchAsync(run.Id, "employee-1", new[] {
             new InventoryEntry(@"C:\Work\same.txt", 1, 1, false),
@@ -109,6 +112,7 @@ public class BackupInventoryServiceTests
     {
         await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var service = new BackupInventoryService(db, TimeProvider.System);
+        await service.SetRuleAsync("device-1", @"C:\Users\ASUS\Desktop", "Include");
         var run = await service.StartAsync("employee-1", "device-1");
         await service.AddBatchAsync(run.Id, "employee-1", new[] {
             new InventoryEntry(@"C:\Users\ASUS\Desktop\a.txt", 10, 1),
@@ -214,6 +218,7 @@ public class BackupInventoryServiceTests
     {
         await using var db = CreateDb(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var service = new BackupInventoryService(db, TimeProvider.System);
+        await service.SetRuleAsync("device-1", @"C:\Work", "Include");
         await service.SetRuleAsync("device-1", @"C:\Private", "Exclude");
         var run = await service.StartAsync("employee-1", "device-1");
         Assert.True(await service.StartBackupAsync(run.Id));

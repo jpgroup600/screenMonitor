@@ -36,7 +36,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         var rules = await db.BackupPathRules.AsNoTracking().Where(x => x.DeviceId == run.DeviceId).ToListAsync();
         var added = batch.Where(x => existing.Add(x.Path)).Select(x => {
             var rule = rules.Where(rule => IsWithin(x.Path, rule.Path)).OrderByDescending(rule => rule.Path.Length).FirstOrDefault();
-            var status = !x.RequiresBackup ? "Unchanged" : rule?.Action == "Exclude" ? "Excluded" : "Pending";
+            var status = !x.RequiresBackup ? "Unchanged" : rule?.Action == "Include" ? "Pending" : "Excluded";
             return new BackupInventoryItem {
                 Run = run, Path = x.Path, SizeBytes = x.SizeBytes, ModifiedUnixSeconds = x.ModifiedUnixSeconds,
                 RequiresBackup = x.RequiresBackup, Status = status, DiscoveredAt = now
@@ -68,7 +68,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         if (rule is null) { rule = new BackupPathRule { DeviceId = deviceId, Path = path }; db.BackupPathRules.Add(rule); }
         rule.Action = action; rule.CreatedAt = timeProvider.GetUtcNow().UtcDateTime;
         await db.SaveChangesAsync();
-        foreach (var run in await db.BackupInventoryRuns.Where(x => x.DeviceId == deviceId && (x.Status == "InventoryReady" || x.Status == "BackingUp")).ToListAsync())
+        foreach (var run in await db.BackupInventoryRuns.Where(x => x.DeviceId == deviceId && (x.Status == "Scanning" || x.Status == "InventoryReady" || x.Status == "BackingUp")).ToListAsync())
             await ApplyRulesAsync(run);
         await db.SaveChangesAsync(); return rule;
     }
@@ -89,7 +89,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
             rule.Action = action; rule.CreatedAt = now;
         }
         await db.SaveChangesAsync();
-        foreach (var run in await db.BackupInventoryRuns.Where(x => x.DeviceId == deviceId && (x.Status == "InventoryReady" || x.Status == "BackingUp")).ToListAsync())
+        foreach (var run in await db.BackupInventoryRuns.Where(x => x.DeviceId == deviceId && (x.Status == "Scanning" || x.Status == "InventoryReady" || x.Status == "BackingUp")).ToListAsync())
             await ApplyRulesAsync(run);
         await db.SaveChangesAsync();
         return normalizedPaths.Count;
@@ -215,7 +215,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         db.BackupPathRules.Remove(rule);
         await db.SaveChangesAsync();
         foreach (var run in await db.BackupInventoryRuns.Where(x => x.DeviceId == rule.DeviceId
-            && (x.Status == "InventoryReady" || x.Status == "BackingUp")).ToListAsync())
+            && (x.Status == "Scanning" || x.Status == "InventoryReady" || x.Status == "BackingUp")).ToListAsync())
             await ApplyRulesAsync(run);
         await db.SaveChangesAsync();
         return rule;
@@ -267,7 +267,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         {
             if (item.Status is not ("Pending" or "Excluded")) continue;
             var rule = rules.Where(x => IsWithin(item.Path, x.Path)).OrderByDescending(x => x.Path.Length).FirstOrDefault();
-            item.Status = rule?.Action == "Exclude" ? "Excluded" : "Pending";
+            item.Status = rule?.Action == "Include" ? "Pending" : "Excluded";
         }
     }
 

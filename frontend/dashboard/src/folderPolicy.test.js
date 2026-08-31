@@ -15,7 +15,7 @@ test('the most specific folder policy wins and reports inheritance', () => {
   ];
   assert.deepEqual(effectiveFolderRule('C:\\Users\\ASUS\\Documents', rules), { action: 'Include', inherited: false, source: 'C:\\Users\\ASUS\\Documents' });
   assert.deepEqual(effectiveFolderRule('C:\\Users\\ASUS\\Documents\\Work', rules), { action: 'Include', inherited: true, source: 'C:\\Users\\ASUS\\Documents' });
-  assert.equal(effectiveFolderRule('D:\\Company', rules).action, 'Include');
+  assert.equal(effectiveFolderRule('D:\\Company', rules).action, 'Exclude');
 });
 
 test('explicit include and exclude lists are separated newest first', () => {

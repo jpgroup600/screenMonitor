@@ -23,7 +23,7 @@ export function effectiveFolderRule(path, rules = []) {
     const candidate = rule.path.replaceAll('/', '\\').replace(/\\+$/, '').toLowerCase();
     return normalized === candidate || normalized.startsWith(`${candidate}\\`);
   }).sort((left, right) => right.path.length - left.path.length);
-  if (!matching.length) return { action: 'Include', inherited: true, source: null };
+  if (!matching.length) return { action: 'Exclude', inherited: true, source: null };
   return { action: matching[0].action, inherited: matching[0].path.toLowerCase() !== path.toLowerCase(), source: matching[0].path };
 }
 
