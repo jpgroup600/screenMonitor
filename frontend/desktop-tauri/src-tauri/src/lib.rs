@@ -433,6 +433,18 @@ async fn run_incremental_backup(
     }
     let manifest = backup_manifest::BackupManifest::load(&state.backup_manifest_path)?;
     let inventory_run = client.start_inventory(&device_id).await?;
+    let folder_roots = roots.clone();
+    let (folder_tx, mut folder_rx) = tokio::sync::mpsc::channel(4);
+    let folder_worker = tauri::async_runtime::spawn_blocking(move || {
+        backup_inventory::scan_folders_streaming(&folder_roots, &backup_policy::BackupPolicy::default(), 250, |batch, current| {
+            folder_tx.blocking_send((batch, current)).map_err(|error| error.to_string())
+        })
+    });
+    while let Some((folders, current)) = folder_rx.recv().await {
+        client.add_inventory_folders(&inventory_run.id, &folders).await?;
+        client.update_inventory_progress(&inventory_run.id, &backup_inventory::ScanProgress { current_path: current, ..Default::default() }).await?;
+    }
+    folder_worker.await.map_err(|error| error.to_string())??;
     let scan_manifest = manifest.clone();
     let scan_roots = roots.clone();
     let (scan_tx, mut scan_rx) = tokio::sync::mpsc::channel(4);

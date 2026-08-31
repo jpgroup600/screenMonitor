@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { canConfirmInventoryPlan, canStartInventoryBackup, inventoryBackupButtonLabel, inventoryBackupPercent, inventoryHeartbeat } from './inventoryProgress.js';
+import { canConfirmInventoryPlan, canStartInventoryBackup, inventoryBackupButtonLabel, inventoryBackupPercent, inventoryHeartbeat, inventoryScanPhase } from './inventoryProgress.js';
 
 test('policy confirmation and backup start are separate states', () => {
   assert.equal(canConfirmInventoryPlan({ status: 'PolicyDraft' }), true);
@@ -8,6 +8,11 @@ test('policy confirmation and backup start are separate states', () => {
   assert.equal(canConfirmInventoryPlan({ status: 'PlanReady' }), false);
   assert.equal(canStartInventoryBackup({ status: 'PlanReady' }), true);
   assert.equal(inventoryBackupButtonLabel({ status: 'Scanning' }), '스캔 완료 후 사용 가능');
+});
+
+test('scan phase changes after the fast folder pass', () => {
+  assert.equal(inventoryScanPhase({ status: 'Scanning', discoveredFiles: 0 }), '1단계 · 폴더 구조 탐색 중');
+  assert.equal(inventoryScanPhase({ status: 'Scanning', discoveredFiles: 1 }), '2단계 · 파일 수와 용량 계산 중');
 });
 
 test('backup percentage uses only files eligible for upload', () => {

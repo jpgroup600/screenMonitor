@@ -43,6 +43,19 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         db.BackupInventoryItems.AddRange(added); await db.SaveChangesAsync(); return added.Count;
     }
 
+    public async Task<int> AddFolderBatchAsync(string runId, string employeeId, IEnumerable<string> paths)
+    {
+        var run = await db.BackupInventoryRuns.FirstOrDefaultAsync(x => x.Id == runId && x.EmployeeId == employeeId && x.Status == "Scanning")
+            ?? throw new InvalidOperationException("Active inventory run was not found.");
+        var batch = paths.Take(500).Select(x => x?.Trim().TrimEnd('\\', '/')).Where(x => !string.IsNullOrWhiteSpace(x)).Cast<string>().ToList();
+        var existing = (await db.BackupInventoryItems.Where(x => x.RunId == runId && x.Status == "FolderMarker" && batch.Contains(x.Path)).Select(x => x.Path).ToListAsync())
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var now = timeProvider.GetUtcNow().UtcDateTime;
+        var added = batch.Where(x => existing.Add(x)).Select(path => new BackupInventoryItem { Run = run, Path = path, SizeBytes = 0,
+            RequiresBackup = false, Status = "FolderMarker", DiscoveredAt = now }).ToList();
+        db.BackupInventoryItems.AddRange(added); await db.SaveChangesAsync(); return added.Count;
+    }
+
     public async Task<bool> CompleteInventoryAsync(string runId, string employeeId)
     {
         var run = await db.BackupInventoryRuns.FirstOrDefaultAsync(x => x.Id == runId && x.EmployeeId == employeeId && x.Status == "Scanning");
@@ -121,7 +134,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
     {
         var run = await db.BackupInventoryRuns.AsNoTracking().FirstOrDefaultAsync(x => x.Id == runId);
         if (run is null) return null;
-        var statuses = await db.BackupInventoryItems.Where(x => x.RunId == runId).GroupBy(x => x.Status)
+        var statuses = await db.BackupInventoryItems.Where(x => x.RunId == runId && x.Status != "FolderMarker").GroupBy(x => x.Status)
             .Select(x => new { Status = x.Key, Count = x.Count() }).ToDictionaryAsync(x => x.Status, x => x.Count);
         int Count(string status) => statuses.GetValueOrDefault(status);
         var lastBackupActivityAt = await db.BackupInventoryItems.Where(x => x.RunId == runId && x.BackedUpAt != null)
@@ -136,7 +149,7 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
 
     public async Task<List<BackupInventoryItem>> ListItemsAsync(string runId, string? search, string? status, int skip = 0, int take = 200, string? folderPath = null)
     {
-        var query = db.BackupInventoryItems.AsNoTracking().Where(x => x.RunId == runId);
+        var query = db.BackupInventoryItems.AsNoTracking().Where(x => x.RunId == runId && x.Status != "FolderMarker");
         if (!string.IsNullOrWhiteSpace(folderPath))
         {
             var folder = folderPath.Trim().TrimEnd('\\', '/').Replace('/', '\\');
@@ -167,11 +180,11 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
         var totals = new Dictionary<string, (int Files, long Bytes, int Pending, int BackedUp, int Failed, int Excluded, int Unchanged)>(StringComparer.OrdinalIgnoreCase);
         foreach (var file in files)
         {
-            foreach (var folder in ParentFolders(file.Path))
+            var folders = file.Status == "FolderMarker" ? SelfAndParentFolders(file.Path) : ParentFolders(file.Path);
+            foreach (var folder in folders)
             {
                 var value = totals.GetValueOrDefault(folder);
-                value.Files++;
-                value.Bytes += file.SizeBytes;
+                if (file.Status != "FolderMarker") { value.Files++; value.Bytes += file.SizeBytes; }
                 if (file.Status == "Pending") value.Pending++;
                 else if (file.Status == "BackedUp") value.BackedUp++;
                 else if (file.Status == "Failed") value.Failed++;
@@ -198,6 +211,12 @@ public class BackupInventoryService(SmDbContext db, TimeProvider timeProvider)
             yield return current;
             current = ParentFolder(current);
         }
+    }
+
+    private static IEnumerable<string> SelfAndParentFolders(string folderPath)
+    {
+        var current = folderPath.Replace('/', '\\').TrimEnd('\\');
+        while (!string.IsNullOrWhiteSpace(current)) { yield return current; current = ParentFolder(current); }
     }
 
     private static string? ParentFolder(string path)

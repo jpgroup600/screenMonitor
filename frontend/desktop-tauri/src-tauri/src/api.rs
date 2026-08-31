@@ -329,6 +329,13 @@ impl ApiClient {
         Ok(())
     }
 
+    pub async fn add_inventory_folders(&self, run_id: &str, folders: &[String]) -> Result<(), String> {
+        self.client.post(format!("{}/backups/inventory/runs/{run_id}/folders", self.base_url))
+            .bearer_auth(&self.token).json(&serde_json::json!({"folders": folders})).send().await
+            .map_err(|e| e.to_string())?.error_for_status().map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     pub async fn complete_inventory(&self, run_id: &str) -> Result<(), String> {
         self.client
             .post(format!(

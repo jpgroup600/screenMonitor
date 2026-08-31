@@ -14,6 +14,11 @@ export function canConfirmInventoryPlan(progress) {
   return progress?.status === 'PolicyDraft';
 }
 
+export function inventoryScanPhase(progress) {
+  if (progress?.status !== 'Scanning') return null;
+  return Number(progress.discoveredFiles || 0) === 0 ? '1단계 · 폴더 구조 탐색 중' : '2단계 · 파일 수와 용량 계산 중';
+}
+
 export function inventoryBackupButtonLabel(progress) {
   if (progress?.status === 'Scanning') return '스캔 완료 후 사용 가능';
   if (progress?.status === 'PolicyDraft') return '정책을 먼저 확정하세요';

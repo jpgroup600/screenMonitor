@@ -25,6 +25,19 @@ public class BackupInventoryServiceTests
     }
 
     [Fact]
+    public async Task Folder_tree_is_visible_before_file_sizes_are_calculated()
+    {
+        await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
+        var service = new BackupInventoryService(db, TimeProvider.System);
+        var run = await service.StartAsync("employee", "device");
+        Assert.Equal(2, await service.AddFolderBatchAsync(run.Id, "employee", new[] { @"C:\Users", @"C:\Users\ASUS" }));
+        var folders = await service.ListFoldersAsync(run.Id, "Users");
+        Assert.Contains(folders, x => x.Path == @"C:\Users" && x.FileCount == 0 && x.SizeBytes == 0);
+        Assert.Contains(folders, x => x.Path == @"C:\Users\ASUS" && x.FileCount == 0 && x.SizeBytes == 0);
+        Assert.Empty(await service.ListItemsAsync(run.Id, null, null));
+    }
+
+    [Fact]
     public async Task Policy_must_be_confirmed_before_backup_can_start()
     {
         await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();

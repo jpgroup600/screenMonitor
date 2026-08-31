@@ -78,6 +78,27 @@ where
     Ok(result)
 }
 
+pub fn scan_folders_streaming<F>(roots: &[String], policy: &BackupPolicy, batch_size: usize, mut on_batch: F) -> Result<u64, String>
+where F: FnMut(Vec<String>, PathBuf) -> Result<(), String>,
+{
+    let mut pending = roots.iter().map(PathBuf::from).collect::<Vec<_>>();
+    let mut batch = Vec::new();
+    let mut discovered = 0;
+    while let Some(directory) = pending.pop() {
+        if !policy.should_include(&directory, None) { continue; }
+        discovered += 1;
+        batch.push(directory.to_string_lossy().to_string());
+        if batch.len() >= batch_size.max(1) { on_batch(std::mem::take(&mut batch), directory.clone())?; }
+        let Ok(entries) = fs::read_dir(&directory) else { continue; };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if entry.file_type().is_ok_and(|kind| kind.is_dir() && !kind.is_symlink()) { pending.push(path); }
+        }
+    }
+    if !batch.is_empty() { on_batch(batch, PathBuf::new())?; }
+    Ok(discovered)
+}
+
 fn scan_directory_streaming<F>(
     directory: &Path,
     policy: &BackupPolicy,
@@ -292,6 +313,20 @@ mod tests {
         assert!(updates.iter().all(|update| update.0 <= 2));
         assert_eq!(updates.last().unwrap().1.discovered_files, 3);
         assert_eq!(updates.last().unwrap().1.discovered_bytes, 6);
+    }
+
+    #[test]
+    fn folder_scan_emits_tree_before_reading_file_metadata() {
+        let directory = tempfile::Builder::new().prefix("folder-tree-").tempdir_in(".").unwrap();
+        fs::create_dir_all(directory.path().join("Users/Employee/Documents")).unwrap();
+        fs::write(directory.path().join("Users/Employee/Documents/report.txt"), b"data").unwrap();
+        let mut folders = Vec::new();
+        let count = scan_folders_streaming(&[directory.path().to_string_lossy().into()], &BackupPolicy::default(), 2, |batch, _| {
+            folders.extend(batch); Ok(())
+        }).unwrap();
+        assert_eq!(count, 4);
+        assert!(folders.iter().any(|path| path.ends_with("Documents")));
+        assert!(!folders.iter().any(|path| path.ends_with("report.txt")));
     }
 
     #[cfg(windows)]

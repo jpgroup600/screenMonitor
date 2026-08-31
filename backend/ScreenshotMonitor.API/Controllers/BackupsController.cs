@@ -87,6 +87,10 @@ public class BackupsController(BackupService service, BackupRestoreService resto
     public async Task<ActionResult<object>> AddInventoryBatch(string runId, InventoryBatchDto request) =>
         Ok(new { added = await inventoryService.AddBatchAsync(runId, EmployeeId, request.Files.Select(x => new InventoryEntry(x.Path, x.SizeBytes, x.ModifiedUnixSeconds, x.RequiresBackup))) });
 
+    [Authorize(Roles = "Employee,Admin"), HttpPost("inventory/runs/{runId}/folders")]
+    public async Task<ActionResult<object>> AddInventoryFolders(string runId, InventoryFolderBatchDto request) =>
+        Ok(new { added = await inventoryService.AddFolderBatchAsync(runId, EmployeeId, request.Folders) });
+
     [Authorize(Roles = "Employee,Admin"), HttpPost("inventory/runs/{runId}/complete")]
     public async Task<IActionResult> CompleteInventory(string runId) =>
         await inventoryService.CompleteInventoryAsync(runId, EmployeeId) ? NoContent() : NotFound();

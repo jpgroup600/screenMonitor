@@ -6,6 +6,7 @@ namespace ScreenshotMonitor.Data.Dto;
 public record InventoryStartDto(string DeviceId);
 public record InventoryEntryDto(string Path, long SizeBytes, long? ModifiedUnixSeconds, bool RequiresBackup = true);
 public record InventoryBatchDto(IReadOnlyList<InventoryEntryDto> Files);
+public record InventoryFolderBatchDto(IReadOnlyList<string> Folders);
 public record InventoryRunDto(string Id, string EmployeeId, string EmployeeName, string DeviceId, string Status, DateTime StartedAt, DateTime? InventoryCompletedAt, DateTime? BackupCompletedAt, bool BackupRequested, long DiscoveredFiles, long DiscoveredBytes, long SkippedEntries, long InaccessibleEntries, string CurrentPath, DateTime? LastProgressAt);
 public record InventoryProgressUpdateDto(long DiscoveredFiles, long DiscoveredBytes, long SkippedEntries, long InaccessibleEntries, string CurrentPath);
 public record InventoryProgressDto(string RunId, string Status, int Total, int Pending, int BackedUp, int Failed, int Excluded, int Unchanged,
