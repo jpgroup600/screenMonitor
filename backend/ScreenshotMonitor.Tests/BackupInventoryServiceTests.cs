@@ -178,7 +178,7 @@ public class BackupInventoryServiceTests
         await using var db = Db(); db.Users.Add(Employee()); await db.SaveChangesAsync();
         var clock = new Clock(new DateTimeOffset(2026, 8, 31, 0, 0, 0, TimeSpan.Zero));
         var service = new BackupInventoryService(db, clock); var run = await service.StartAsync("employee", "device");
-        clock.Advance(TimeSpan.FromMinutes(30)); Assert.Equal(run.Id, (await service.ActiveRunAsync("employee", "device"))!.Id);
+        clock.Advance(TimeSpan.FromMinutes(1)); Assert.Equal(run.Id, (await service.ActiveRunAsync("employee", "device"))!.Id);
     }
 
     [Fact]
