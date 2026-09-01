@@ -38,6 +38,7 @@ async fn collect(
         return Ok(());
     }
     let config_path = data_directory.join("agent-policy.dat");
+    let exit_request_path = data_directory.join("exit-request.dat");
     let spool = ServiceSpool::new(data_directory.join("service-spool"))?;
     let backups = ServiceBackupQueue::new(data_directory.join("service-backups"))?;
     let (sender, mut receiver) = tokio::sync::mpsc::unbounded_channel();
@@ -56,6 +57,14 @@ async fn collect(
     while running.load(Ordering::SeqCst) {
         tokio::select! {
             _ = config_tick.tick() => {
+                if let Ok(Some(request)) = crate::exit_request::ExitRequest::load(&exit_request_path) {
+                    if consume_exit_grant(&request).await {
+                        let _ = std::fs::remove_file(&exit_request_path);
+                        running.store(false, Ordering::SeqCst);
+                        continue;
+                    }
+                    let _ = std::fs::remove_file(&exit_request_path);
+                }
                 let next = ServiceConfig::load(&config_path).unwrap_or_default();
                 if next != active_config {
                     watcher = if next.file_change_audit_enabled || next.backup_enabled {
@@ -186,6 +195,13 @@ async fn collect(
     Ok(())
 }
 
+async fn consume_exit_grant(request: &crate::exit_request::ExitRequest) -> bool {
+    reqwest::Client::new()
+        .post("https://api-production-18d6.up.railway.app/api/agent-exit/consume")
+        .json(&serde_json::json!({ "deviceId": request.device_id, "token": request.token }))
+        .send().await.map(|response| response.status().is_success()).unwrap_or(false)
+}
+
 fn drive_changes(
     previous: &HashSet<String>,
     current: &HashSet<String>,
@@ -259,6 +275,7 @@ mod tests {
         std::fs::create_dir_all(&watched).unwrap();
         let data = directory.path().join("program-data");
         ServiceConfig {
+            device_id: "device-1".into(),
             backup_enabled: true,
             file_change_audit_enabled: false,
             network_audit_enabled: false,

@@ -15,6 +15,7 @@ export const native = {
   storeAuthToken: (token) => invoke('store_auth_token', { token }),
   loadAuthToken: () => invoke('load_auth_token'),
   clearAuthToken: () => invoke('clear_auth_token'),
+  completeAuthorizedExit: (deviceId, grantToken) => invoke('complete_authorized_exit', { deviceId, grantToken }),
   captureScreenshot: () => invoke('capture_screenshot'),
   startAttendanceReminders: () => invoke('start_attendance_reminders'),
   stopAttendanceReminders: () => invoke('stop_attendance_reminders'),

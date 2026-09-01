@@ -8,6 +8,7 @@ mod backup_retry;
 mod backup_staging;
 mod core;
 mod data_protection;
+mod exit_request;
 mod file_change_audit;
 mod monitor;
 mod network_audit;
@@ -36,7 +37,7 @@ use std::{
     },
     time::Duration,
 };
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt;
 use tauri_plugin_notification::NotificationExt;
 
@@ -112,8 +113,9 @@ impl AppState {
         })
     }
 
-    fn save_service_policy(&self, policy: &monitor::MonitoringPolicy) -> Result<(), String> {
+    fn save_service_policy(&self, device_id: &str, policy: &monitor::MonitoringPolicy) -> Result<(), String> {
         ServiceConfig {
+            device_id: device_id.to_owned(),
             backup_enabled: policy.backup_enabled,
             file_change_audit_enabled: policy.file_change_audit_enabled,
             network_audit_enabled: policy.network_audit_enabled,
@@ -152,6 +154,17 @@ fn load_auth_token(state: State<'_, AppState>) -> Result<Option<String>, String>
 fn clear_auth_token(state: State<'_, AppState>) -> Result<(), String> {
     state.auth_token_store.clear()?;
     *state.token.lock().map_err(|error| error.to_string())? = None;
+    Ok(())
+}
+
+#[tauri::command]
+fn complete_authorized_exit(device_id: String, grant_token: String, app: tauri::AppHandle) -> Result<(), String> {
+    if device_id.trim().is_empty() || grant_token.trim().is_empty() {
+        return Err("Exit authorization is required.".into());
+    }
+    exit_request::ExitRequest { device_id, token: grant_token }
+        .save(&service_config::program_data_directory().join("exit-request.dat"))?;
+    app.exit(0);
     Ok(())
 }
 
@@ -274,7 +287,7 @@ fn start_monitoring(
     policy: monitor::MonitoringPolicy,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    state.save_service_policy(&policy)?;
+    state.save_service_policy(&device_id, &policy)?;
     let mut session = state.session.lock().map_err(|e| e.to_string())?;
     if let Some(existing) = session.take() {
         existing.stop();
@@ -300,7 +313,7 @@ fn start_attendance_monitoring(
     policy: monitor::MonitoringPolicy,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    state.save_service_policy(&policy)?;
+    state.save_service_policy(&device_id, &policy)?;
     let mut session = state.session.lock().map_err(|e| e.to_string())?;
     if let Some(existing) = session.take() {
         existing.stop();
@@ -1081,7 +1094,8 @@ pub fn run() {
             agent_status,
             store_auth_token,
             load_auth_token,
-            clear_auth_token
+            clear_auth_token,
+            complete_authorized_exit
         ])
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
@@ -1118,7 +1132,13 @@ pub fn run() {
                             let _ = window.set_focus();
                         }
                     }
-                    "quit" => app.exit(0),
+                    "quit" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                            let _ = window.emit("authorized-exit-requested", ());
+                        }
+                    },
                     _ => {}
                 })
                 .build(app)?;

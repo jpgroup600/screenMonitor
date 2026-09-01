@@ -8,6 +8,7 @@ use std::{
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(default, rename_all = "camelCase")]
 pub struct ServiceConfig {
+    pub device_id: String,
     pub backup_enabled: bool,
     pub file_change_audit_enabled: bool,
     pub network_audit_enabled: bool,
@@ -67,6 +68,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("agent-policy.dat");
         let config = ServiceConfig {
+            device_id: "device-1".into(),
             backup_enabled: true,
             file_change_audit_enabled: true,
             network_audit_enabled: true,
@@ -91,6 +93,7 @@ mod tests {
         )
         .unwrap();
         assert!(value.backup_enabled);
+        assert!(value.device_id.is_empty());
         assert!(!value.usb_risk_detection_enabled);
     }
 }
